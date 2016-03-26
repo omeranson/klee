@@ -7,6 +7,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <iostream>
+
 #include "Passes.h"
 
 #include "klee/Config/Version.h"
@@ -218,9 +220,21 @@ bool IntrinsicCleanerPass::runOnBasicBlock(BasicBlock &b, Module &M) {
       case Intrinsic::trap: {
         // Intrisic instruction "llvm.trap" found. Directly lower it to
         // a call of the abort() function.
-        Function *F = cast<Function>(
-          M.getOrInsertFunction(
-            "abort", Type::getVoidTy(getGlobalContext()), NULL));
+	Constant * abortF = M.getOrInsertFunction(
+            "abort", Type::getVoidTy(getGlobalContext()), NULL);
+	Function *F = NULL;
+	if (isa<Function>(abortF)) {
+		F = cast<Function>(abortF);
+	} else if (isa<ConstantExpr>(abortF)) {
+		Value * op = abortF->getOperand(0);
+		F = cast<Function>(op);
+	} else if (isa<GlobalAlias>(abortF)) {
+		GlobalAlias * ga = cast<GlobalAlias>(abortF);
+		Constant * c = ga->getAliasee();
+		F = cast<Function>(c);
+	} else {
+		std::cerr << "Strange type for function abort: " << abortF->getValueID() << "\n";
+	}
         F->setDoesNotReturn();
         F->setDoesNotThrow();
 

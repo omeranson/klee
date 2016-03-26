@@ -42,6 +42,8 @@
 
 #include <setjmp.h>
 #include <signal.h>
+#include <stdio.h>
+#include <unistd.h>
 
 using namespace llvm;
 using namespace klee;
@@ -106,13 +108,14 @@ ExternalDispatcher::ExternalDispatcher() {
     sys::DynamicLibrary::LoadLibraryPermanently(0);
   }
 
-#ifdef WINDOWS
-  preboundFunctions["getpid"] = (void*) (long) getpid;
+  //preboundFunctions["getpid"] = (void*) (long) getpid;
   preboundFunctions["putchar"] = (void*) (long) putchar;
   preboundFunctions["printf"] = (void*) (long) printf;
+  preboundFunctions["__GI_printf"] = (void*) (long) printf;
   preboundFunctions["fprintf"] = (void*) (long) fprintf;
+  preboundFunctions["__GI_fprintf"] = (void*) (long) fprintf;
+  preboundFunctions["__write_nocancel"] = (void*) (long) write;
   preboundFunctions["sprintf"] = (void*) (long) sprintf;
-#endif
 }
 
 ExternalDispatcher::~ExternalDispatcher() {
@@ -124,18 +127,19 @@ bool ExternalDispatcher::executeCall(Function *f, Instruction *i, uint64_t *args
   Function *dispatcher;
 
   if (it == dispatchers.end()) {
-#ifdef WINDOWS
     std::map<std::string, void*>::iterator it2 = 
-      preboundFunctions.find(f->getName()));
+      preboundFunctions.find(f->getName());
+    llvm::errs() << "Function may be unknown: " << f->getName() << "\n";
 
     if (it2 != preboundFunctions.end()) {
       // only bind once
+    llvm::errs() << "Function is prebound: " << f->getName() << " -> " << it->second << "\n";
       if (it2->second) {
         executionEngine->addGlobalMapping(f, it2->second);
+	sys::DynamicLibrary::AddSymbol(f->getName(), it2->second);
         it2->second = 0;
       }
     }
-#endif
 
     dispatcher = createDispatcher(f,i);
 
@@ -147,6 +151,8 @@ bool ExternalDispatcher::executeCall(Function *f, Instruction *i, uint64_t *args
       // trigger crashes instead of being caught as aborts in the external
       // function.
       executionEngine->recompileAndRelinkFunction(dispatcher);
+    } else {
+    llvm::errs() << "No dispatcher for: " << f->getName() << "\n";
     }
   } else {
     dispatcher = it->second;
