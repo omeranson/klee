@@ -12,6 +12,7 @@
 #include "TimingSolver.h"
 
 #include "klee/ExecutionState.h"
+#include "klee/Constraints.h"
 
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
@@ -100,6 +101,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_prefer_cex", handlePreferCex, false),
   add("klee_posix_prefer_cex", handlePosixPreferCex, false),
   add("klee_print_expr", handlePrintExpr, false),
+  add("klee_print_constraints", handlePrintConstraints, false),
   add("klee_print_range", handlePrintRange, false),
   add("klee_set_forking", handleSetForking, false),
   add("klee_stack_trace", handleStackTrace, false),
@@ -453,6 +455,22 @@ void SpecialFunctionHandler::handlePrintExpr(ExecutionState &state,
 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
   llvm::errs() << msg_str << ":" << arguments[1] << "\n";
+}
+
+void SpecialFunctionHandler::handlePrintConstraints(ExecutionState &state,
+                                  KInstruction *target,
+                                  std::vector<ref<Expr> > &arguments) {
+  assert(arguments.size()==1 &&
+         "invalid number of arguments to klee_print_constraints");
+
+  std::string msg_str = readStringAtAddress(state, arguments[0]);
+  llvm::errs() << msg_str << ": ( TRUE";
+  ConstraintManager constraintManager = state.constraints;
+  ConstraintManager::constraint_iterator it;
+  for (it = constraintManager.begin(); it != constraintManager.end(); it++) {
+    llvm::errs() << " AND " << *it;
+  }
+  llvm::errs() << "\n";
 }
 
 void SpecialFunctionHandler::handleSetForking(ExecutionState &state,

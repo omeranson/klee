@@ -30,6 +30,7 @@
 #include "klee/TimerStatIncrementer.h"
 #include "klee/CommandLine.h"
 #include "klee/Common.h"
+#include "klee/Summary.h"
 #include "klee/util/Assignment.h"
 #include "klee/util/ExprPPrinter.h"
 #include "klee/util/ExprSMTLIBPrinter.h"
@@ -272,6 +273,12 @@ namespace {
   cl::list<std::string>
   ForceExternal("force-external-symbol",
             cl::desc("Force this symbol to be external"),
+            cl::value_desc("symbol")
+  );
+
+  cl::list<std::string>
+  AlsoSummariseFunction("also-summarise-function",
+            cl::desc("Also summarise this function, and output the summary"),
             cl::value_desc("symbol")
   );
 }
@@ -965,8 +972,6 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
 			c->getType()->isSized()
 	);
 	w = 1;
-      } else {
-          klee_message("ConstantExpr::create: : v=%u, w=%u", 0, w);
       }
       return ConstantExpr::create(0, w);
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 1)
@@ -1149,6 +1154,8 @@ void Executor::executeGetValue(ExecutionState &state,
   }
 }
 
+// @brief Update the state to point to the new instruction. In effect increases
+// pc, and stores the old value in state.prevPC.
 void Executor::stepInstruction(ExecutionState &state) {
   if (DebugPrintInstructions) {
     printFileLine(state, state.pc);
@@ -1173,17 +1180,32 @@ bool Executor::isForcedExternal(Function * f) {
 }
 
 bool Executor::isForcedExternal(std::string & name) {
-  std::vector<std::string>::iterator fe_it;
-  std::vector<std::string>::iterator fe_ie;
-  for (fe_it = ForceExternal.begin(), fe_ie = ForceExternal.end();
-          fe_it != fe_ie; ++fe_it) {
-    if (name == *fe_it) {
-      klee_message("isForcedExternal: %s: YES", name.c_str());
-    	return true;
-    }
-  }
-      klee_message("isForcedExternal: %s: NO", name.c_str());
-  return false;
+	std::vector<std::string>::iterator fe_it;
+	std::vector<std::string>::iterator fe_ie;
+	for (fe_it = ForceExternal.begin(), fe_ie = ForceExternal.end();
+			fe_it != fe_ie; ++fe_it) {
+		if (name == *fe_it) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool Executor::isAlsoSummariseFunction(std::string & name) const {
+	std::vector<std::string>::iterator asf_it;
+	std::vector<std::string>::iterator asf_ie = AlsoSummariseFunction.end();
+	for (asf_it = AlsoSummariseFunction.begin(); asf_it != asf_ie; ++asf_it) {
+		if (name == *asf_it) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void Executor::doSummariseFunction(ExecutionState & state, Function * f) const {
+    Summary summary(state, *this);
+    summary.update(f);
+    summary.debug();
 }
 
 void Executor::executeCall(ExecutionState &state, 
@@ -1193,7 +1215,12 @@ void Executor::executeCall(ExecutionState &state,
   Instruction *i = ki->inst;
   if (f && isForcedExternal(f)) {
       callExternalFunction(state, ki, f, arguments);
-  } else if (f && f->isDeclaration()) {
+      return;
+  }
+  if (f && isAlsoSummariseFunction(f)) {
+      doSummariseFunction(f);
+  }
+  if (f && f->isDeclaration()) {
     switch(f->getIntrinsicID()) {
     case Intrinsic::not_intrinsic:
       // state may be destroyed by this call, cannot touch
@@ -1382,6 +1409,7 @@ void Executor::printFileLine(ExecutionState &state, KInstruction *ki) {
 
 /// Compute the true target of a function call, resolving LLVM and KLEE aliases
 /// and bitcasts.
+/// NOTE(oanson) This method has to be rewritten if we want to be smarter about alises.
 Function* Executor::getTargetFunction(Value *calledVal, ExecutionState &state) {
   SmallPtrSet<const GlobalValue*, 3> Visited;
 
@@ -1391,14 +1419,11 @@ Function* Executor::getTargetFunction(Value *calledVal, ExecutionState &state) {
 
   while (true) {
     if (GlobalValue *gv = dyn_cast<GlobalValue>(c)) {
-      klee_message("getTargetFunction: Looking for function %s", gv->getName().str().c_str());
       if (!Visited.insert(gv))
         return 0;
 
       std::string alias = state.getFnAlias(gv->getName());
-      klee_message("getTargetFunction: Looking for function %s alias '%s'", gv->getName().str().c_str(), alias.c_str());
       if (alias != "") {
-        klee_message("getTargetFunction: %s aliasses %s", gv->getName().str().c_str(), alias.c_str());
         llvm::Module* currModule = kmodule->module;
         GlobalValue *old_gv = gv;
         gv = currModule->getNamedValue(alias);
@@ -1413,7 +1438,6 @@ Function* Executor::getTargetFunction(Value *calledVal, ExecutionState &state) {
         return f;
       else if (GlobalAlias *ga = dyn_cast<GlobalAlias>(gv)) {
         c = ga->getAliasee();
-      klee_message("getTargetFunction: Global alias %s -> %s", gv->getName().str().c_str(), c->getName().str().c_str());
       } else
         return 0;
     } else if (llvm::ConstantExpr *ce = dyn_cast<llvm::ConstantExpr>(c)) {
@@ -1511,7 +1535,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
           terminateStateOnExecError(state, "return void when caller expected a result");
         }
       }
-    }      
+    }
     break;
   }
 #if LLVM_VERSION_CODE < LLVM_VERSION(3, 1)
@@ -1583,7 +1607,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     } else {
       std::map<BasicBlock*, ref<Expr> > targets;
       ref<Expr> isDefault = ConstantExpr::alloc(1, Expr::Bool);
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 1)      
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 1)
       for (SwitchInst::CaseIt i = si->case_begin(), e = si->case_end();
            i != e; ++i) {
         ref<Expr> value = evalConstant(i.getCaseValue());
@@ -1609,7 +1633,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
           it->second = OrExpr::create(match, it->second);
         }
+
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 1)
       }
+#else
+      }
+#endif
       bool res;
       bool success = solver->mayBeTrue(state, isDefault, res);
       assert(success && "FIXME: Unhandled solver failure");
@@ -1793,7 +1822,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     bindLocal(ki, state, SubExpr::create(left, right));
     break;
   }
- 
+
   case Instruction::Mul: {
     ref<Expr> left = eval(ki, 0, state).value;
     ref<Expr> right = eval(ki, 1, state).value;
@@ -1824,7 +1853,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     bindLocal(ki, state, result);
     break;
   }
- 
+
   case Instruction::SRem: {
     ref<Expr> left = eval(ki, 0, state).value;
     ref<Expr> right = eval(ki, 1, state).value;
@@ -1886,7 +1915,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   case Instruction::ICmp: {
     CmpInst *ci = cast<CmpInst>(i);
     ICmpInst *ii = cast<ICmpInst>(ci);
- 
+
     switch(ii->getPredicate()) {
     case ICmpInst::ICMP_EQ: {
       ref<Expr> left = eval(ki, 0, state).value;
@@ -1973,11 +2002,11 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     }
     break;
   }
- 
+
     // Memory instructions...
   case Instruction::Alloca: {
     AllocaInst *ai = cast<AllocaInst>(i);
-    unsigned elementSize = 
+    unsigned elementSize =
       kmodule->targetData->getTypeStoreSize(ai->getAllocatedType());
     ref<Expr> size = Expr::createPointer(elementSize);
     if (ai->isArrayAllocation()) {
@@ -2005,8 +2034,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     KGEPInstruction *kgepi = static_cast<KGEPInstruction*>(ki);
     ref<Expr> base = eval(ki, 0, state).value;
 
-    for (std::vector< std::pair<unsigned, uint64_t> >::iterator 
-           it = kgepi->indices.begin(), ie = kgepi->indices.end(); 
+    for (std::vector< std::pair<unsigned, uint64_t> >::iterator
+           it = kgepi->indices.begin(), ie = kgepi->indices.end();
          it != ie; ++it) {
       uint64_t elementSize = it->second;
       ref<Expr> index = eval(ki, it->first, state).value;
@@ -2740,7 +2769,7 @@ std::string Executor::getAddressInfo(ExecutionState &state,
   }
   
   if (!EmitMemoryStateOnMemError) {
-    MemoryObject hack((unsigned) example);    
+    MemoryObject hack((unsigned) example);
     MemoryMap::iterator lower = state.addressSpace.objects.upper_bound(&hack);
     info << "\tnext: ";
     if (lower==state.addressSpace.objects.end()) {
@@ -2778,7 +2807,7 @@ std::string Executor::getAddressInfo(ExecutionState &state,
         info << "object " << objcount++ << " at " << mo->address 
              << " of size " << mo->size << "\n"
              << "\t\t" << alloc_info << "\n";
-    	++it;
+	++it;
     }
 
   }

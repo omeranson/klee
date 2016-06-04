@@ -11,6 +11,8 @@ cscope.*
 *.sum
 *.out
 *.status
+*.swp
+*.swo
 
 # In source build files
 docs/doxygen.cfg

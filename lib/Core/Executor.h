@@ -87,6 +87,7 @@ class Executor : public Interpreter {
   friend class WeightedRandomSearcher;
   friend class SpecialFunctionHandler;
   friend class StatsTracker;
+  friend class Summary;
 
 public:
   class Timer {
@@ -403,6 +404,8 @@ private:
                      double maxInstTime);
   void checkMemoryUsage();
 
+  bool isAlsoSummariseFunction(std::string & name) const;
+  void doSummariseFunction(ExecutionState & state, Function * f) const;
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);
   virtual ~Executor();

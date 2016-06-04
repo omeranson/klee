@@ -42,7 +42,6 @@
 
 #include <setjmp.h>
 #include <signal.h>
-#include <stdio.h>
 #include <unistd.h>
 
 using namespace llvm;
@@ -108,14 +107,14 @@ ExternalDispatcher::ExternalDispatcher() {
     sys::DynamicLibrary::LoadLibraryPermanently(0);
   }
 
-  //preboundFunctions["getpid"] = (void*) (long) getpid;
+#ifdef WINDOWS
+  preboundFunctions["getpid"] = (void*) (long) getpid;
   preboundFunctions["putchar"] = (void*) (long) putchar;
   preboundFunctions["printf"] = (void*) (long) printf;
-  preboundFunctions["__GI_printf"] = (void*) (long) printf;
   preboundFunctions["fprintf"] = (void*) (long) fprintf;
-  preboundFunctions["__GI_fprintf"] = (void*) (long) fprintf;
-  preboundFunctions["__write_nocancel"] = (void*) (long) write;
   preboundFunctions["sprintf"] = (void*) (long) sprintf;
+#endif
+  preboundFunctions["__syscall"] = (void*) (long) syscall;
 }
 
 ExternalDispatcher::~ExternalDispatcher() {
@@ -129,15 +128,13 @@ bool ExternalDispatcher::executeCall(Function *f, Instruction *i, uint64_t *args
   if (it == dispatchers.end()) {
     std::map<std::string, void*>::iterator it2 = 
       preboundFunctions.find(f->getName());
-    llvm::errs() << "Function may be unknown: " << f->getName() << "\n";
 
     if (it2 != preboundFunctions.end()) {
       // only bind once
-    llvm::errs() << "Function is prebound: " << f->getName() << " -> " << it->second << "\n";
       if (it2->second) {
-        executionEngine->addGlobalMapping(f, it2->second);
+	executionEngine->addGlobalMapping(f, it2->second);
 	sys::DynamicLibrary::AddSymbol(f->getName(), it2->second);
-        it2->second = 0;
+	it2->second = 0;
       }
     }
 
