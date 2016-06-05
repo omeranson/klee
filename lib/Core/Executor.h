@@ -404,8 +404,9 @@ private:
                      double maxInstTime);
   void checkMemoryUsage();
 
-  bool isAlsoSummariseFunction(std::string & name) const;
-  void doSummariseFunction(ExecutionState & state, Function * f) const;
+  bool isAlsoSummariseFunction(const std::string & name) const;
+  bool isAlsoSummariseFunction(llvm::Function * f) const;
+  void doSummariseFunction(ExecutionState & state, llvm::Function * f) const;
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);
   virtual ~Executor();

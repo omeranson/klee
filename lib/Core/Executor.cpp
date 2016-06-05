@@ -1191,7 +1191,7 @@ bool Executor::isForcedExternal(std::string & name) {
 	return false;
 }
 
-bool Executor::isAlsoSummariseFunction(std::string & name) const {
+bool Executor::isAlsoSummariseFunction(const std::string & name) const {
 	std::vector<std::string>::iterator asf_it;
 	std::vector<std::string>::iterator asf_ie = AlsoSummariseFunction.end();
 	for (asf_it = AlsoSummariseFunction.begin(); asf_it != asf_ie; ++asf_it) {
@@ -1202,9 +1202,15 @@ bool Executor::isAlsoSummariseFunction(std::string & name) const {
 	return false;
 }
 
+bool Executor::isAlsoSummariseFunction(llvm::Function * f) const {
+	const std::string & name = f->getName().str();
+	return isAlsoSummariseFunction(name);
+}
+
 void Executor::doSummariseFunction(ExecutionState & state, Function * f) const {
+    klee_message("Summarising function: %s", f->getName().str().c_str());
     Summary summary(state, *this);
-    summary.update(f);
+    summary.update(*f);
     summary.debug();
 }
 
@@ -1218,7 +1224,7 @@ void Executor::executeCall(ExecutionState &state,
       return;
   }
   if (f && isAlsoSummariseFunction(f)) {
-      doSummariseFunction(f);
+      doSummariseFunction(state, f);
   }
   if (f && f->isDeclaration()) {
     switch(f->getIntrinsicID()) {
