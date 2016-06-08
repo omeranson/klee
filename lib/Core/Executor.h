@@ -406,7 +406,7 @@ private:
 
   bool isAlsoSummariseFunction(const std::string & name) const;
   bool isAlsoSummariseFunction(llvm::Function * f) const;
-  void doSummariseFunction(ExecutionState & state, llvm::Function * f) const;
+  void doSummariseFunction(KInstruction * ki, ExecutionState & state, llvm::Function * f, std::vector< ref<Expr> > &arguments) ;
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);
   virtual ~Executor();

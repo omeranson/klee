@@ -1207,25 +1207,38 @@ bool Executor::isAlsoSummariseFunction(llvm::Function * f) const {
 	return isAlsoSummariseFunction(name);
 }
 
-void Executor::doSummariseFunction(ExecutionState & state, Function * f) const {
+void Executor::doSummariseFunction(KInstruction * ki, ExecutionState & state, Function * f ,std::vector< ref<Expr> > &arguments) {
     klee_message("Summarising function: %s", f->getName().str().c_str());
-    Summary summary(state, *this);
+    Summary summary(arrayCache);
     summary.update(*f);
     summary.debug();
+    assert(arguments.size() == summary.arguments().size() && "Argument size mismatch");
+    for (unsigned idx = 0; idx < arguments.size(); idx++) {
+	ref<Expr> eq = EqExpr::create(arguments[idx], summary.arguments()[idx]);
+	state.constraints.addConstraint(eq);
+    }
+    if (summary.hasReturnValue()) {
+	    bindLocal(ki, state, summary.returnValue());
+    }
+    std::map<klee::ref<klee::Expr>, klee::ref<klee::Expr> >::const_iterator it;
+    for (it = summary.modifiedMemory().begin(); it != summary.modifiedMemory().end(); it++) {
+	executeMemoryOperation(state, true, it->first, it->second, 0);
+    }
 }
 
 void Executor::executeCall(ExecutionState &state, 
                            KInstruction *ki,
                            Function *f,
                            std::vector< ref<Expr> > &arguments) {
-  Instruction *i = ki->inst;
   if (f && isForcedExternal(f)) {
       callExternalFunction(state, ki, f, arguments);
       return;
   }
   if (f && isAlsoSummariseFunction(f)) {
-      doSummariseFunction(state, f);
+      doSummariseFunction(ki, state, f, arguments);
+      return;
   }
+  Instruction *i = ki->inst;
   if (f && f->isDeclaration()) {
     switch(f->getIntrinsicID()) {
     case Intrinsic::not_intrinsic:
