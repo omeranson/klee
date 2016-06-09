@@ -24,6 +24,7 @@ protected:
     klee::ref<klee::Expr> _returnValue;
     std::map<klee::ref<klee::Expr>, klee::ref<klee::Expr> > _modifiedMemory;
     std::map<klee::ref<klee::Expr>, klee::ref<klee::Expr> > _stackMemory;
+    std::map<const llvm::GlobalValue*, klee::ref<klee::Expr> > _globals;
     std::vector<klee::ref<klee::Expr> > _arguments;
     std::string _functionName;
     klee::ArrayCache & _arrayCache;
@@ -62,18 +63,21 @@ protected:
     virtual void update(const llvm::BasicBlock & basicBlock);
     virtual void update(const llvm::Instruction & instruction);
 
-    virtual klee::ref<klee::Expr> _evaluate(const llvm::Value & value) const;
-    virtual klee::ref<klee::Expr> _evaluate(const llvm::LoadInst & instruction) const;
-    virtual klee::ref<klee::Expr> _evaluate(const llvm::Argument & argument) const;
+    virtual klee::ref<klee::Expr> _evaluate(const llvm::Value & value) ;
+    virtual klee::ref<klee::Expr> _evaluate(const llvm::LoadInst & instruction);
+    virtual klee::ref<klee::Expr> _evaluate(const llvm::Argument & argument) ;
+    virtual klee::ref<klee::Expr> _evaluate(const llvm::GlobalValue & globalValue);
 public:
     Summary(klee::ArrayCache & arrayCache);
     virtual void update(const llvm::Function & function);
-    virtual klee::ref<klee::Expr> evaluate(const llvm::Value & value) const;
+    virtual klee::ref<klee::Expr> evaluate(const llvm::Value & value) ;
     virtual klee::ref<klee::Expr> createSymbolicExpr(LLVM_TYPE_Q llvm::Type * type, const std::string & name) const;
     // TODO(oanson) Make these methods consts
     bool hasReturnValue() const ;
     // Representatives of the arguments
     std::vector<klee::ref<klee::Expr> > & arguments();
+    // Representatives of globals
+    const std::map<const llvm::GlobalValue *, klee::ref<klee::Expr> > & globals() const;
     // The return value
     klee::ref<klee::Expr> & returnValue() ;
     // Modified memory addresses, and their values

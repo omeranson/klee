@@ -415,7 +415,7 @@ void Summary::updateWithInstruction(const llvm::ShuffleVectorInst & instruction)
 }
 */
 
-klee::ref<klee::Expr> Summary::evaluate(const llvm::Value & value) const {
+klee::ref<klee::Expr> Summary::evaluate(const llvm::Value & value) {
 	if (llvm::isa<llvm::Instruction>(value)) {
 	    const llvm::Instruction & instruction = llvm::cast<llvm::Instruction>(value);
 	    switch (instruction.getOpcode()) {
@@ -605,6 +605,9 @@ klee::ref<klee::Expr> Summary::evaluate(const llvm::Value & value) const {
 		} else if (llvm::isa<llvm::ConstantFP>(value)) {
 			const llvm::ConstantFP & constant = llvm::cast<llvm::ConstantFP>(value);
 			return klee::ConstantExpr::alloc(constant.getValueAPF());
+		} else if (llvm::isa<llvm::GlobalValue>(value)) {
+			const llvm::GlobalValue & globalValue = llvm::cast<llvm::GlobalValue>(value);
+			_evaluate(globalValue);
 		}
 	} else if (llvm::isa<llvm::Argument>(value)) {
 		const llvm::Argument & argument = llvm::cast<llvm::Argument>(value);
@@ -613,7 +616,7 @@ klee::ref<klee::Expr> Summary::evaluate(const llvm::Value & value) const {
 	return _evaluate(value);
 }
 
-klee::ref<klee::Expr> Summary::_evaluate(const llvm::Value & value) const {
+klee::ref<klee::Expr> Summary::_evaluate(const llvm::Value & value) {
     LLVM_TYPE_Q llvm::Type *type = value.getType();
     std::string name;
     if (value.hasName()) {
@@ -624,17 +627,26 @@ klee::ref<klee::Expr> Summary::_evaluate(const llvm::Value & value) const {
     return createSymbolicExpr(type, name);
 }
 
-klee::ref<klee::Expr> Summary::_evaluate(const llvm::Argument & argument) const {
+klee::ref<klee::Expr> Summary::_evaluate(const llvm::Argument & argument) {
 	unsigned index = argument.getArgNo();
 	return _arguments[index];
 }
 
-klee::ref<klee::Expr> Summary::_evaluate(const llvm::LoadInst & instruction) const {
+klee::ref<klee::Expr> Summary::_evaluate(const llvm::GlobalValue & globalValue) {
+// TODO This causes the load to fail.
+	std::map<const llvm::GlobalValue *, klee::ref<klee::Expr> >::const_iterator it = _globals.find(&globalValue);
+	if (it != _globals.end()) {
+		return it->second;
+	}
+	LLVM_TYPE_Q llvm::Type *type = globalValue.getType();
+	klee::ref<klee::Expr> value = createSymbolicExpr(type, globalValue.getName().str());
+	_globals[&globalValue] = value;
+	return value;
+}
+
+klee::ref<klee::Expr> Summary::_evaluate(const llvm::LoadInst & instruction) {
 	const llvm::Value * pointerValue = instruction.getPointerOperand();
 	klee::ref<klee::Expr> pointerExpr = evaluate(*pointerValue);
-    std::stringstream ss;
-    ss << pointerExpr;
-    klee::klee_message("load for %s", ss.str().c_str());
 	std::map<klee::ref<klee::Expr>, klee::ref<klee::Expr> >::const_iterator it = _modifiedMemory.find(pointerExpr);
 	if (it != _modifiedMemory.end()) {
 		return it->second;
@@ -662,6 +674,10 @@ bool Summary::hasReturnValue() const {
 
 std::vector<klee::ref<klee::Expr> > & Summary::arguments() {
     return _arguments;
+}
+
+const std::map<const llvm::GlobalValue *, klee::ref<klee::Expr> > & Summary::globals() const {
+	return _globals;
 }
 
 // The return value
@@ -704,6 +720,15 @@ void Summary::debug() const {
     for (it = _stackMemory.begin(); it != _stackMemory.end(); it++) {
         ss << *(it->first) << ": ";
 	ss << *(it->second) << ", ";
+    }
+    ss << "}";
+    ss << "  globals: { ";
+    std::map<const llvm::GlobalValue *, klee::ref<klee::Expr> >::const_iterator globals_it;
+    for (globals_it = _globals.begin(); globals_it != _globals.end(); globals_it++) {
+	std::string buffer;
+	llvm::raw_string_ostream rso(buffer);
+	rso << (globals_it->first->getName().str()) << ": " << *(globals_it->second) << ", ";
+	ss << rso.str();
     }
     ss << "}";
     klee::klee_message("Summary for %s: %s", _functionName.c_str(), ss.str().c_str());

@@ -1220,6 +1220,14 @@ void Executor::doSummariseFunction(KInstruction * ki, ExecutionState & state, Fu
     if (summary.hasReturnValue()) {
 	    bindLocal(ki, state, summary.returnValue());
     }
+
+    std::map<const llvm::GlobalValue *, klee::ref<klee::Expr> >::const_iterator globals_it;
+    for (globals_it = summary.globals().begin(); globals_it != summary.globals().end(); globals_it++) {
+	klee::ref<klee::Expr> address = globalAddresses.find(globals_it->first)->second;
+	ref<Expr> eq = EqExpr::create(address, globals_it->second);
+	state.constraints.addConstraint(eq);
+    }
+
     std::map<klee::ref<klee::Expr>, klee::ref<klee::Expr> >::const_iterator it;
     for (it = summary.modifiedMemory().begin(); it != summary.modifiedMemory().end(); it++) {
 	executeMemoryOperation(state, true, it->first, it->second, 0);
