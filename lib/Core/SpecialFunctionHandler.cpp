@@ -464,13 +464,9 @@ void SpecialFunctionHandler::handlePrintConstraints(ExecutionState &state,
          "invalid number of arguments to klee_print_constraints");
 
   std::string msg_str = readStringAtAddress(state, arguments[0]);
-  llvm::errs() << msg_str << ": ( TRUE";
-  ConstraintManager constraintManager = state.constraints;
-  ConstraintManager::constraint_iterator it;
-  for (it = constraintManager.begin(); it != constraintManager.end(); it++) {
-    llvm::errs() << " AND " << *it;
-  }
-  llvm::errs() << "\n";
+  std::stringstream ss ;
+  ss << state.constraints;
+  llvm::errs() << msg_str << ": " << ss.str() << "\n";
 }
 
 void SpecialFunctionHandler::handleSetForking(ExecutionState &state,

@@ -9,6 +9,8 @@
 #include "klee/klee.h"
 #include "klee/Internal/Support/ErrorHandling.h"
 
+static int runcount = 0;
+
 Summary::Summary (klee::ArrayCache & arrayCache)
         : _arrayCache(arrayCache), _module(0) {}
 
@@ -27,6 +29,7 @@ void Summary::update(const llvm::Function & function) {
     for (it = function.begin(); it != function.end(); it++) {
         update(*it);
     }
+    ++runcount;
 }
 
 void Summary::update(const llvm::BasicBlock & basicBlock) {
@@ -279,6 +282,11 @@ void Summary::updateWithInstruction(const llvm::ReturnInst & instruction) {
     if (!returnValue) {
         _hasReturnValue = false;
         return;
+    }
+    if (_hasReturnValue) {
+	LLVM_TYPE_Q llvm::Type *type = returnValue->getType();
+        _returnValue = createSymbolicExpr(type, "return_value");
+	return;
     }
     _returnValue = evaluate(*returnValue);
     _hasReturnValue = true;
@@ -663,7 +671,9 @@ klee::ref<klee::Expr> Summary::createSymbolicExpr(LLVM_TYPE_Q llvm::Type * type,
     llvm::DataLayout dataLayout(_module);
     klee::Expr::Width width = dataLayout.getTypeSizeInBits(type);
     size_t size = klee::Expr::getMinBytesForWidth(width);
-    const klee::Array *array = _arrayCache.CreateArray(name, size);
+    std::stringstream ss;
+    ss << name << "_r_" << runcount;
+    const klee::Array *array = _arrayCache.CreateArray(ss.str(), size);
     return klee::Expr::createTempRead(array, width);
 }
 
@@ -703,11 +713,17 @@ void Summary::execute(klee::ExecutionState& state) {
 */
 void Summary::debug() const {
     std::stringstream ss;
+    ss << "Arguments: { ";
+    for (unsigned idx = 0; idx < _arguments.size(); idx++) {
+        ss << idx << ": " << *(_arguments[idx]) << ", ";
+    }
+    ss << "}";
+
     if (hasReturnValue()) {
-	    ss << "Return value: ";
+	    ss << "  Return value: ";
 	    ss << *_returnValue;
     } else {
-	    ss << "No return value.";
+	    ss << "  No return value.";
     }
     ss << "  Modified memory: { ";
     std::map<klee::ref<klee::Expr>, klee::ref<klee::Expr> >::const_iterator it;

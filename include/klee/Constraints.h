@@ -74,6 +74,16 @@ private:
   void addConstraintInternal(ref<Expr> e);
 };
 
+inline std::ostream &operator<<(std::ostream &os, const ConstraintManager &constraintManager) {
+  os << "( TRUE";
+  ConstraintManager::constraint_iterator it;
+  for (it = constraintManager.begin(); it != constraintManager.end(); it++) {
+    os << " AND " << *it;
+  }
+  os << ")";
+  return os;
+}
+
 }
 
 #endif /* KLEE_CONSTRAINTS_H */
