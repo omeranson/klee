@@ -1207,30 +1207,63 @@ bool Executor::isAlsoSummariseFunction(llvm::Function * f) const {
 	return isAlsoSummariseFunction(name);
 }
 
+class ArgumentExprVisitor : public ExprVisitor {
+protected:
+	std::map< ref<Expr>, ref<Expr> > _arguments;
+	std::map< ref<Expr>, ref<Expr> > _globalAddresses;
+	ArrayCache & _arrayCache;
+public:
+    ArgumentExprVisitor(Summary & summary,
+    		ArrayCache & arrayCache,
+    		std::vector< ref<Expr> > &arguments,
+		std::map<const llvm::GlobalValue*, ref<klee::ConstantExpr> > & globalAddresses)
+		: ExprVisitor(), _arrayCache(arrayCache) {
+	for (unsigned idx = 0; idx < arguments.size(); idx++) {
+		_arguments.insert(std::make_pair(summary.arguments()[idx], arguments[idx]));
+	}
+	std::map<const llvm::GlobalValue *, klee::ref<klee::Expr> >::const_iterator globals_it;
+	for (globals_it = summary.globals().begin(); globals_it != summary.globals().end(); globals_it++) {
+		klee::ref<klee::Expr> address = globalAddresses.find(globals_it->first)->second;
+		_globalAddresses.insert(std::make_pair(globals_it->second, address));
+	}
+    }
+
+    virtual Action visitArgument(const ArgumentExpr& argumentExpr) {
+	std::map< ref<Expr>, ref<Expr> >::const_iterator it = _arguments.find(
+			&(const_cast<ArgumentExpr&>(argumentExpr)));
+	if (it == _arguments.end()) {
+		it = _globalAddresses.find(
+				&(const_cast<ArgumentExpr&>(argumentExpr)));
+		assert((it != _globalAddresses.end()) && ("Could not find argument or global" + argumentExpr.name()).c_str());
+	}
+    	return Action::changeTo(it->second);
+    }
+
+    virtual Action visitPureSymbolic(const PureSymbolicExpr& pureSymbolicExpr) {
+        const Array *array = _arrayCache.CreateArray(pureSymbolicExpr.name(),
+			Expr::getMinBytesForWidth(pureSymbolicExpr.getWidth()));
+	ref<Expr> result = Expr::createTempRead(array, pureSymbolicExpr.getWidth());
+    	return Action::changeTo(result);
+    }
+};
+
 void Executor::doSummariseFunction(KInstruction * ki, ExecutionState & state, Function * f ,std::vector< ref<Expr> > &arguments) {
     klee_message("Summarising function: %s", f->getName().str().c_str());
-    Summary summary(arrayCache);
+    Summary summary;
     summary.update(*f);
     summary.debug();
     assert(arguments.size() == summary.arguments().size() && "Argument size mismatch");
-    for (unsigned idx = 0; idx < arguments.size(); idx++) {
-	ref<Expr> eq = EqExpr::create(arguments[idx], summary.arguments()[idx]);
-	state.constraints.addConstraint(eq);
-    }
+    ArgumentExprVisitor visitor = ArgumentExprVisitor(summary, arrayCache, arguments, globalAddresses);
     if (summary.hasReturnValue()) {
-	    bindLocal(ki, state, summary.returnValue());
-    }
-
-    std::map<const llvm::GlobalValue *, klee::ref<klee::Expr> >::const_iterator globals_it;
-    for (globals_it = summary.globals().begin(); globals_it != summary.globals().end(); globals_it++) {
-	klee::ref<klee::Expr> address = globalAddresses.find(globals_it->first)->second;
-	ref<Expr> eq = EqExpr::create(address, globals_it->second);
-	state.constraints.addConstraint(eq);
+	    ref<Expr> returnValue = visitor.visit(summary.returnValue());
+	    bindLocal(ki, state, returnValue);
     }
 
     std::map<klee::ref<klee::Expr>, klee::ref<klee::Expr> >::const_iterator it;
     for (it = summary.modifiedMemory().begin(); it != summary.modifiedMemory().end(); it++) {
-	executeMemoryOperation(state, true, it->first, it->second, 0);
+	ref<Expr> base = visitor.visit(it->first);
+	ref<Expr> value = visitor.visit(it->second);
+	executeMemoryOperation(state, true, base, value, 0);
     }
 }
 

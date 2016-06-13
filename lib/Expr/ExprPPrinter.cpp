@@ -287,6 +287,15 @@ private:
     print(ee->expr, PC);
   }
 
+  void printArgument(const ArgumentExpr *ae, PrintContext &PC, unsigned indent) {
+    PC << "Argument(" << ae->name() << ')';
+  }
+
+  void printPureSymbolic(const PureSymbolicExpr *pse, PrintContext &PC, unsigned indent) {
+    PC << "PureSymbolic(width=" << pse->getWidth() << ')';
+  }
+
+
   void printExpr(const Expr *ep, PrintContext &PC, unsigned indent, bool printConstWidth=false) {
     bool simple = hasSimpleKids(ep);
     
@@ -404,6 +413,10 @@ public:
           printRead(re, PC, indent);
         } else if (const ExtractExpr *ee = dyn_cast<ExtractExpr>(e)) {
           printExtract(ee, PC, indent);
+        } else if (const ArgumentExpr *ae = dyn_cast<ArgumentExpr>(e)) {
+          printArgument(ae, PC, indent);
+        } else if (const PureSymbolicExpr *pse = dyn_cast<PureSymbolicExpr>(e)) {
+          printPureSymbolic(pse, PC, indent);
         } else if (e->getKind() == Expr::Concat || e->getKind() == Expr::SExt)
 	  printExpr(e.get(), PC, indent, true);
 	else

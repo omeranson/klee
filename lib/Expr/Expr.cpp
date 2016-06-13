@@ -122,6 +122,8 @@ void Expr::printKind(llvm::raw_ostream &os, Kind k) {
     X(Constant);
     X(NotOptimized);
     X(Read);
+    X(Argument);
+    X(PureSymbolic);
     X(Select);
     X(Concat);
     X(Extract);

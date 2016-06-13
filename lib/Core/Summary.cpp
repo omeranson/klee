@@ -11,8 +11,8 @@
 
 static int runcount = 0;
 
-Summary::Summary (klee::ArrayCache & arrayCache)
-        : _arrayCache(arrayCache), _module(0) {}
+Summary::Summary ()
+        : _module(0) {}
 
 void Summary::update(const llvm::Function & function) {
     _module = function.getParent();
@@ -20,9 +20,8 @@ void Summary::update(const llvm::Function & function) {
     _arguments.assign(function.arg_size(), 0);
     llvm::Function::const_arg_iterator args_it;
     for (args_it = function.arg_begin(); args_it != function.arg_end(); args_it++) {
-	LLVM_TYPE_Q llvm::Type *type = args_it->getType();
 	unsigned index = args_it->getArgNo();
-	_arguments[index] = createSymbolicExpr(type, args_it->getName().str());
+	_arguments[index] = klee::ArgumentExpr::create(args_it->getName().str());
     }
     _functionName = function.getName().str();
     llvm::Function::const_iterator it;
@@ -646,8 +645,7 @@ klee::ref<klee::Expr> Summary::_evaluate(const llvm::GlobalValue & globalValue) 
 	if (it != _globals.end()) {
 		return it->second;
 	}
-	LLVM_TYPE_Q llvm::Type *type = globalValue.getType();
-	klee::ref<klee::Expr> value = createSymbolicExpr(type, globalValue.getName().str());
+	klee::ref<klee::Expr> value = klee::ArgumentExpr::create(globalValue.getName().str());
 	_globals[&globalValue] = value;
 	return value;
 }
@@ -670,11 +668,7 @@ klee::ref<klee::Expr> Summary::_evaluate(const llvm::LoadInst & instruction) {
 klee::ref<klee::Expr> Summary::createSymbolicExpr(LLVM_TYPE_Q llvm::Type * type, const std::string & name) const {
     llvm::DataLayout dataLayout(_module);
     klee::Expr::Width width = dataLayout.getTypeSizeInBits(type);
-    size_t size = klee::Expr::getMinBytesForWidth(width);
-    std::stringstream ss;
-    ss << name << "_r_" << runcount;
-    const klee::Array *array = _arrayCache.CreateArray(ss.str(), size);
-    return klee::Expr::createTempRead(array, width);
+    return klee::PureSymbolicExpr::create(name, width);
 }
 
 // TODO(oanson) Make these methods consts

@@ -27,7 +27,6 @@ protected:
     std::map<const llvm::GlobalValue*, klee::ref<klee::Expr> > _globals;
     std::vector<klee::ref<klee::Expr> > _arguments;
     std::string _functionName;
-    klee::ArrayCache & _arrayCache;
     llvm::Module const * _module;
 
     virtual void updateWithInstruction(const llvm::Instruction & instruction);
@@ -68,7 +67,7 @@ protected:
     virtual klee::ref<klee::Expr> _evaluate(const llvm::Argument & argument) ;
     virtual klee::ref<klee::Expr> _evaluate(const llvm::GlobalValue & globalValue);
 public:
-    Summary(klee::ArrayCache & arrayCache);
+    Summary();
     virtual void update(const llvm::Function & function);
     virtual klee::ref<klee::Expr> evaluate(const llvm::Value & value) ;
     virtual klee::ref<klee::Expr> createSymbolicExpr(LLVM_TYPE_Q llvm::Type * type, const std::string & name) const;

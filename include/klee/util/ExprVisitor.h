@@ -50,6 +50,8 @@ namespace klee {
 
     virtual Action visitNotOptimized(const NotOptimizedExpr&);
     virtual Action visitRead(const ReadExpr&);
+    virtual Action visitArgument(const ArgumentExpr&);
+    virtual Action visitPureSymbolic(const PureSymbolicExpr&);
     virtual Action visitSelect(const SelectExpr&);
     virtual Action visitConcat(const ConcatExpr&);
     virtual Action visitExtract(const ExtractExpr&);

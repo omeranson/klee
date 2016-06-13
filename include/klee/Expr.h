@@ -120,6 +120,8 @@ public:
 
     //// Skip old varexpr, just for deserialization, purge at some point
     Read=NotOptimized+2, 
+    Argument,
+    PureSymbolic,
     Select,
     Concat,
     Extract,
@@ -1083,6 +1085,84 @@ public:
 
   ref<ConstantExpr> Neg();
   ref<ConstantExpr> Not();
+};
+
+class ArgumentExpr : public NonConstantExpr {
+public:
+  static const Kind kind = Argument;
+  static const unsigned numKids = 0;
+protected:
+	std::string _name;
+	ArgumentExpr(const std::string & name) : NonConstantExpr(), _name(name) {}
+public:
+	virtual ~ArgumentExpr() {};
+
+	const std::string & name() const { return _name; }
+
+  virtual Width getWidth() const { return 0; }
+  virtual Kind getKind() const { return Argument; }
+
+  virtual unsigned getNumKids() const { return 0; }
+  virtual ref<Expr> getKid(unsigned i) const { return 0; }
+
+  virtual ref<Expr> rebuild(ref<Expr> kids[]) const {
+    assert(0 && "rebuild() on ArgumentExpr");
+    return alloc(_name);
+  }
+
+  static ref<ArgumentExpr> alloc(const std::string & name) {
+    ref<ArgumentExpr> r(new ArgumentExpr(name));
+    r->computeHash();
+    return r;
+  }
+
+  static ref<ArgumentExpr> create(const std::string & name) {
+  	return alloc(name);
+  }
+
+  static bool classof(const Expr *E) { return E->getKind() == Expr::Argument; }
+  static bool classof(const ArgumentExpr *) { return true; }
+
+};
+
+class PureSymbolicExpr : public NonConstantExpr {
+public:
+  static const Kind kind = PureSymbolic;
+  static const unsigned numKids = 0;
+protected:
+	std::string _name;
+	Width _width;
+	PureSymbolicExpr(const std::string & name, Width w) :
+			NonConstantExpr(), _name(name), _width(w) {}
+public:
+	virtual ~PureSymbolicExpr() {};
+
+	const std::string & name() const { return _name; }
+
+  virtual Width getWidth() const { return _width; }
+  virtual Kind getKind() const { return PureSymbolic; }
+
+  virtual unsigned getNumKids() const { return 0; }
+  virtual ref<Expr> getKid(unsigned i) const { return 0; }
+
+  virtual ref<Expr> rebuild(ref<Expr> kids[]) const {
+    assert(0 && "rebuild() on PureSymbolicExpr");
+    return alloc(_name, _width);
+  }
+
+  static ref<PureSymbolicExpr> alloc(const std::string & name, Width w) {
+    ref<PureSymbolicExpr> r(new PureSymbolicExpr(name, w));
+    r->computeHash();
+    return r;
+  }
+
+  static ref<PureSymbolicExpr> create(const std::string & name, Width w) {
+  	return alloc(name, w);
+  }
+
+  static bool classof(const Expr *E) { return E->getKind() == Expr::PureSymbolic; }
+  static bool classof(const PureSymbolicExpr *) { return true; }
+
 };
 
 // Implementations

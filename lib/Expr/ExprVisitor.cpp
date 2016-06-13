@@ -57,6 +57,8 @@ ref<Expr> ExprVisitor::visitActual(const ref<Expr> &e) {
     switch(ep.getKind()) {
     case Expr::NotOptimized: res = visitNotOptimized(static_cast<NotOptimizedExpr&>(ep)); break;
     case Expr::Read: res = visitRead(static_cast<ReadExpr&>(ep)); break;
+    case Expr::Argument: res = visitArgument(static_cast<ArgumentExpr&>(ep)); break;
+    case Expr::PureSymbolic: res = visitPureSymbolic(static_cast<PureSymbolicExpr&>(ep)); break;
     case Expr::Select: res = visitSelect(static_cast<SelectExpr&>(ep)); break;
     case Expr::Concat: res = visitConcat(static_cast<ConcatExpr&>(ep)); break;
     case Expr::Extract: res = visitExtract(static_cast<ExtractExpr&>(ep)); break;
@@ -138,6 +140,14 @@ ExprVisitor::Action ExprVisitor::visitNotOptimized(const NotOptimizedExpr&) {
 
 ExprVisitor::Action ExprVisitor::visitRead(const ReadExpr&) {
   return Action::doChildren(); 
+}
+
+ExprVisitor::Action ExprVisitor::visitArgument(const ArgumentExpr&) {
+  return Action::skipChildren();
+}
+
+ExprVisitor::Action ExprVisitor::visitPureSymbolic(const PureSymbolicExpr&) {
+  return Action::skipChildren();
 }
 
 ExprVisitor::Action ExprVisitor::visitSelect(const SelectExpr&) {
