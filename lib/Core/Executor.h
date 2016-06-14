@@ -17,6 +17,7 @@
 
 #include "klee/ExecutionState.h"
 #include "klee/Interpreter.h"
+#include "klee/Summary.h"
 #include "klee/Internal/Module/Cell.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
@@ -87,7 +88,6 @@ class Executor : public Interpreter {
   friend class WeightedRandomSearcher;
   friend class SpecialFunctionHandler;
   friend class StatsTracker;
-  friend class Summary;
 
 public:
   class Timer {
@@ -180,6 +180,9 @@ private:
   /// The maximum time to allow for a single core solver query.
   /// (e.g. for a single STP query)
   double coreSolverTimeout;
+
+  /// A mapping between functions and their summaries.
+  std::map<const llvm::Function *, Summary> summaries;
 
   /// Assumes ownership of the created array objects
   ArrayCache arrayCache;

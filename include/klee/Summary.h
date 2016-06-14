@@ -9,7 +9,6 @@
 #include "klee/Constraints.h"
 #include "klee/ExecutionState.h"
 #include "klee/util/ArrayCache.h"
-#include "Executor.h"
 
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instruction.h>
@@ -68,6 +67,8 @@ protected:
     virtual klee::ref<klee::Expr> _evaluate(const llvm::GlobalValue & globalValue);
 public:
     Summary();
+    // Summary(const Summary &) = default;
+    // Summary(Summary &&) = default;
     virtual void update(const llvm::Function & function);
     virtual klee::ref<klee::Expr> evaluate(const llvm::Value & value) ;
     virtual klee::ref<klee::Expr> createSymbolicExpr(LLVM_TYPE_Q llvm::Type * type, const std::string & name) const;

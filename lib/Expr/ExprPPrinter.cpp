@@ -288,11 +288,11 @@ private:
   }
 
   void printArgument(const ArgumentExpr *ae, PrintContext &PC, unsigned indent) {
-    PC << "Argument(" << ae->name() << ')';
+    PC << ae->name();
   }
 
   void printPureSymbolic(const PureSymbolicExpr *pse, PrintContext &PC, unsigned indent) {
-    PC << "PureSymbolic(width=" << pse->getWidth() << ')';
+    PC << pse->name();
   }
 
 
