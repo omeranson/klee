@@ -1109,6 +1109,7 @@ public:
     assert(0 && "rebuild() on ArgumentExpr");
     return alloc(_name);
   }
+  virtual int compareContents(const Expr &b) const { return (uintptr_t)this - (uintptr_t)&b; }
 
   static ref<ArgumentExpr> alloc(const std::string & name) {
     ref<ArgumentExpr> r(new ArgumentExpr(name));
@@ -1149,6 +1150,7 @@ public:
     assert(0 && "rebuild() on PureSymbolicExpr");
     return alloc(_name, _width);
   }
+  virtual int compareContents(const Expr &b) const { return (uintptr_t)this - (uintptr_t)&b; }
 
   static ref<PureSymbolicExpr> alloc(const std::string & name, Width w) {
     ref<PureSymbolicExpr> r(new PureSymbolicExpr(name, w));

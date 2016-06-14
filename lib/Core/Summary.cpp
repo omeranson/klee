@@ -600,11 +600,6 @@ klee::ref<klee::Expr> Summary::evaluate(const llvm::Value & value) {
 		    break;
 		}
 	    }
-/*
-	} else if (llvm::isa<llvm::Argument>(value)) {
-		llvm::Argument & argument = llvm::cast<llvm::Argument>(value);
-		return _evaluate(argument);
-*/
 	} else if (llvm::isa<llvm::Constant>(value)) {
 		if (llvm::isa<llvm::ConstantInt>(value)) {
 			const llvm::ConstantInt & constant = llvm::cast<llvm::ConstantInt>(value);
@@ -614,16 +609,22 @@ klee::ref<klee::Expr> Summary::evaluate(const llvm::Value & value) {
 			return klee::ConstantExpr::alloc(constant.getValueAPF());
 		} else if (llvm::isa<llvm::GlobalValue>(value)) {
 			const llvm::GlobalValue & globalValue = llvm::cast<llvm::GlobalValue>(value);
-			_evaluate(globalValue);
+			return _evaluate(globalValue);
 		}
 	} else if (llvm::isa<llvm::Argument>(value)) {
 		const llvm::Argument & argument = llvm::cast<llvm::Argument>(value);
-		_evaluate(argument);
+		return _evaluate(argument);
+	} else {
+		return _evaluate(value);
 	}
-	return _evaluate(value);
+	assert(0 && "Unhandled case!");
 }
 
 klee::ref<klee::Expr> Summary::_evaluate(const llvm::Value & value) {
+    std::map<const llvm::Value*, klee::ref<klee::Expr> >::iterator it = _values.find(&value);
+    if (it != _values.end()) {
+    	return it->second;
+    }
     LLVM_TYPE_Q llvm::Type *type = value.getType();
     std::string name;
     if (value.hasName()) {
@@ -631,7 +632,9 @@ klee::ref<klee::Expr> Summary::_evaluate(const llvm::Value & value) {
     } else {
     	name = "<unnamed>";
     }
-    return createSymbolicExpr(type, name);
+    klee::ref<klee::Expr> result = createSymbolicExpr(type, name);
+    _values[&value] = result;
+    return result;
 }
 
 klee::ref<klee::Expr> Summary::_evaluate(const llvm::Argument & argument) {

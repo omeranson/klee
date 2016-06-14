@@ -24,6 +24,7 @@ protected:
     std::map<klee::ref<klee::Expr>, klee::ref<klee::Expr> > _modifiedMemory;
     std::map<klee::ref<klee::Expr>, klee::ref<klee::Expr> > _stackMemory;
     std::map<const llvm::GlobalValue*, klee::ref<klee::Expr> > _globals;
+    std::map<const llvm::Value*, klee::ref<klee::Expr> > _values;
     std::vector<klee::ref<klee::Expr> > _arguments;
     std::string _functionName;
     llvm::Module const * _module;

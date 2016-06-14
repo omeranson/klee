@@ -1240,7 +1240,10 @@ public:
     }
 
     virtual Action visitPureSymbolic(const PureSymbolicExpr& pureSymbolicExpr) {
-        const Array *array = _arrayCache.CreateArray(pureSymbolicExpr.name(),
+	static unsigned counter = 0;
+	std::stringstream ss;
+	ss << pureSymbolicExpr.name() << "_r_" << ++counter;
+        const Array *array = _arrayCache.CreateArray(ss.str(),
 			Expr::getMinBytesForWidth(pureSymbolicExpr.getWidth()));
 	ref<Expr> result = Expr::createTempRead(array, pureSymbolicExpr.getWidth());
     	return Action::changeTo(result);
