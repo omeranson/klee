@@ -12,6 +12,7 @@
 
 #include "klee/Constraints.h"
 #include "klee/Expr.h"
+#include "klee/Summary.h"
 #include "klee/Internal/ADT/TreeStream.h"
 
 // FIXME: We do not want to be exposing these? :(
@@ -21,6 +22,7 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <list>
 
 namespace klee {
 class Array;
@@ -145,6 +147,7 @@ public:
   void addFnAlias(std::string old_fn, std::string new_fn);
   void removeFnAlias(std::string fn);
 
+  std::list<SummaryExecution> summaries;
 private:
   ExecutionState() : ptreeNode(0) {}
 

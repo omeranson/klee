@@ -84,6 +84,13 @@ inline std::ostream &operator<<(std::ostream &os, const ConstraintManager &const
   return os;
 }
 
+inline llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const ConstraintManager &constraintManager) {
+  std::stringstream ss;
+  ss << constraintManager;
+  os << ss.str();
+  return os;
+}
+
 }
 
 #endif /* KLEE_CONSTRAINTS_H */

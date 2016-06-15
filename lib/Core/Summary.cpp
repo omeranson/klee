@@ -15,6 +15,7 @@ Summary::Summary ()
         : _module(0) {}
 
 void Summary::update(const llvm::Function & function) {
+    _function = &function;
     _module = function.getParent();
     // TODO(oanson) No support for vararg
     _arguments.assign(function.arg_size(), 0);
@@ -697,6 +698,10 @@ std::map<klee::ref<klee::Expr>, klee::ref<klee::Expr> > & Summary::modifiedMemor
     return _modifiedMemory;
 }
 
+const llvm::Function & Summary::function() const {
+	return *_function;
+}
+
 /*
 void Summary::execute(klee::ExecutionState& state) {
     ExprEvaluator ee;
@@ -708,8 +713,8 @@ void Summary::execute(klee::ExecutionState& state) {
     }
 }
 */
-void Summary::debug() const {
-    std::stringstream ss;
+
+void Summary::print(std::ostream& ss) const {
     ss << "Arguments: { ";
     for (unsigned idx = 0; idx < _arguments.size(); idx++) {
         ss << idx << ": " << *(_arguments[idx]) << ", ";
@@ -744,5 +749,29 @@ void Summary::debug() const {
 	ss << rso.str();
     }
     ss << "}";
+}
+
+void Summary::debug() const {
+    std::stringstream ss;
+    ss << *this;
     klee::klee_message("Summary for %s: %s", _functionName.c_str(), ss.str().c_str());
+}
+
+/** SummaryExecution **/
+
+SummaryExecution::SummaryExecution(Summary & summary) : summary(summary) {}
+const std::map<klee::ref<klee::ArgumentExpr>, klee::ref<klee::Expr> > & SummaryExecution::arguments() const {
+	return _arguments;
+}
+
+const std::map<klee::ref<klee::PureSymbolicExpr>, klee::ref<klee::Expr> > & SummaryExecution::symbolics() const {
+	return _symbolics;
+}
+
+void SummaryExecution::map(klee::ref<klee::ArgumentExpr> &key, klee::ref<klee::Expr> & value) {
+	_arguments.insert(std::make_pair(key, value));
+}
+
+void SummaryExecution::map(klee::ref<klee::PureSymbolicExpr> &key, klee::ref<klee::Expr> & value) {
+	_symbolics.insert(std::make_pair(key, value));
 }

@@ -4,11 +4,9 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <ostream>
 
 #include "klee/Common.h"
-#include "klee/Constraints.h"
-#include "klee/ExecutionState.h"
-#include "klee/util/ArrayCache.h"
 
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instruction.h>
@@ -27,6 +25,7 @@ protected:
     std::map<const llvm::Value*, klee::ref<klee::Expr> > _values;
     std::vector<klee::ref<klee::Expr> > _arguments;
     std::string _functionName;
+    llvm::Function const * _function;
     llvm::Module const * _module;
 
     virtual void updateWithInstruction(const llvm::Instruction & instruction);
@@ -83,9 +82,27 @@ public:
     klee::ref<klee::Expr> & returnValue() ;
     // Modified memory addresses, and their values
     std::map<klee::ref<klee::Expr>, klee::ref<klee::Expr> > & modifiedMemory();
+    // The function being summarised
+    const llvm::Function & function() const;
 
+    virtual void print(std::ostream&) const;
     virtual void debug() const;
 };
+
+class SummaryExecution {
+protected:
+	std::map<klee::ref<klee::ArgumentExpr>, klee::ref<klee::Expr> > _arguments;
+	std::map<klee::ref<klee::PureSymbolicExpr>, klee::ref<klee::Expr> > _symbolics;
+public:
+	const Summary & summary;
+	SummaryExecution(Summary & summary);
+	const std::map<klee::ref<klee::ArgumentExpr>, klee::ref<klee::Expr> > & arguments() const;
+	const std::map<klee::ref<klee::PureSymbolicExpr>, klee::ref<klee::Expr> > & symbolics() const;
+
+	void map(klee::ref<klee::ArgumentExpr> &key, klee::ref<klee::Expr> & value);
+	void map(klee::ref<klee::PureSymbolicExpr> &key, klee::ref<klee::Expr> & value);
+};
+
 /*
 class SummaryWithConstraints : public Summary {
 protected:
@@ -94,5 +111,17 @@ public:
 	SummaryWithConstraints() : Summary() {}
 };
 */
+
+inline std::ostream & operator<<(std::ostream & os, const Summary & summary) {
+	summary.print(os);
+	return os;
+}
+
+inline llvm::raw_ostream & operator<<(llvm::raw_ostream & os, const Summary & summary) {
+	std::stringstream ss;
+	ss << summary;
+	os << ss.str();
+	return os;
+}
 
 #endif /* KLEE_SUMMARY_H */

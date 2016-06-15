@@ -1213,11 +1213,13 @@ protected:
 	std::map< ref<Expr>, ref<Expr> > _globalAddresses;
 	ArrayCache & _arrayCache;
 public:
+    SummaryExecution execution;
+
     ArgumentExprVisitor(Summary & summary,
     		ArrayCache & arrayCache,
     		std::vector< ref<Expr> > &arguments,
 		std::map<const llvm::GlobalValue*, ref<klee::ConstantExpr> > & globalAddresses)
-		: ExprVisitor(), _arrayCache(arrayCache) {
+		: ExprVisitor(), _arrayCache(arrayCache), execution(summary) {
 	for (unsigned idx = 0; idx < arguments.size(); idx++) {
 		_arguments.insert(std::make_pair(summary.arguments()[idx], arguments[idx]));
 	}
@@ -1236,6 +1238,9 @@ public:
 				&(const_cast<ArgumentExpr&>(argumentExpr)));
 		assert((it != _globalAddresses.end()) && ("Could not find argument or global" + argumentExpr.name()).c_str());
 	}
+	ref<ArgumentExpr> argExprRef = &(const_cast<ArgumentExpr&>(argumentExpr));
+	ref<Expr> value = const_cast<ref<Expr>& >(it->second);
+	execution.map(argExprRef, value);
     	return Action::changeTo(it->second);
     }
 
@@ -1246,6 +1251,8 @@ public:
         const Array *array = _arrayCache.CreateArray(ss.str(),
 			Expr::getMinBytesForWidth(pureSymbolicExpr.getWidth()));
 	ref<Expr> result = Expr::createTempRead(array, pureSymbolicExpr.getWidth());
+	ref<PureSymbolicExpr> pureSymbExprRef = &(const_cast<PureSymbolicExpr&>(pureSymbolicExpr));
+	execution.map(pureSymbExprRef, result);
     	return Action::changeTo(result);
     }
 };
@@ -1276,6 +1283,8 @@ void Executor::doSummariseFunction(KInstruction * ki, ExecutionState & state, Fu
 	ref<Expr> value = visitor.visit(it->second);
 	executeMemoryOperation(state, true, base, value, 0);
     }
+
+    state.summaries.push_back(visitor.execution);
 }
 
 void Executor::executeCall(ExecutionState &state, 
@@ -2969,6 +2978,14 @@ const InstructionInfo & Executor::getLastNonKleeInternalInstruction(const Execut
   }
   return *ii;
 }
+
+template<class T, class U>
+std::string toString(const std::pair<T, U > & value) {
+	std::stringstream ss;
+	ss << "\t\t\t<" << value.first << ", " << value.second << ">";
+	return ss.str();
+}
+
 void Executor::terminateStateOnError(ExecutionState &state,
                                      const llvm::Twine &messaget,
                                      const char *suffix,
@@ -3002,6 +3019,31 @@ void Executor::terminateStateOnError(ExecutionState &state,
     std::string info_str = info.str();
     if (info_str != "")
       msg << "Info: \n" << info_str;
+
+/** Summarisation:
+ * We start by printing out the summarised methods and the conditions therein.
+ * Then we have to store this information, so that we can go back to the
+ * summarised function and re-test it with the conditions.
+ */
+	std::stringstream ss;
+	ss << "Summaries:\n";
+	std::list<SummaryExecution>::const_iterator it;
+	for (it = state.summaries.begin(); it != state.summaries.end(); it++) {
+		const SummaryExecution & execution = *it;
+		const Summary & summary = execution.summary;
+		ss << "\t" << summary.function().getName().str() << ": " <<
+				summary << "\n";
+		ss << "\t\tArguments:\n";
+		std::transform(execution.arguments().begin(), execution.arguments().end(),
+		          std::ostream_iterator<std::string>(ss, "\n"),
+			  toString<klee::ref<klee::ArgumentExpr>, klee::ref<klee::Expr> >);
+		ss << "\t\tSymbolics:\n";
+		std::transform(execution.symbolics().begin(), execution.symbolics().end(),
+		          std::ostream_iterator<std::string>(ss, "\n"),
+			  toString<klee::ref<klee::PureSymbolicExpr>, klee::ref<klee::Expr> >);
+	}
+	ss << "Constraints:\n" << state.constraints;
+	msg << ss.str();
 
     interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
   }
