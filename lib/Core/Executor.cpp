@@ -1272,6 +1272,11 @@ void Executor::doSummariseFunction(KInstruction * ki, ExecutionState & state, Fu
     assert(arguments.size() == summary.arguments().size() && "Argument size mismatch");
 
     ArgumentExprVisitor visitor = ArgumentExprVisitor(summary, arrayCache, arguments, globalAddresses);
+    std::vector<klee::ref<klee::Expr> >::const_iterator args_it;
+    for (args_it = summary.arguments().begin(); args_it != summary.arguments().end(); args_it++) {
+        visitor.visit(*args_it);
+    }
+
     if (summary.hasReturnValue()) {
 	    ref<Expr> returnValue = visitor.visit(summary.returnValue());
 	    bindLocal(ki, state, returnValue);
