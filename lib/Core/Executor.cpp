@@ -1258,16 +1258,7 @@ public:
 };
 
 void Executor::doSummariseFunction(KInstruction * ki, ExecutionState & state, Function * f ,std::vector< ref<Expr> > &arguments) {
-    std::map<const llvm::Function *, Summary>::iterator summ_it = summaries.find(f);
-    if (summ_it == summaries.end()) {
-	klee_message("Summarising function: %s", f->getName().str().c_str());
-	Summary summary;
-	summary.update(*f);
-    	summ_it = summaries.insert(std::make_pair(f, summary)).first;
-    } else {
-	klee_message("Using existing summary for function: %s", f->getName().str().c_str());
-    }
-    Summary & summary = summ_it->second;
+    Summary & summary = Summary::get(f);
     summary.debug();
     assert(arguments.size() == summary.arguments().size() && "Argument size mismatch");
 

@@ -9,7 +9,18 @@
 #include "klee/klee.h"
 #include "klee/Internal/Support/ErrorHandling.h"
 
-static int runcount = 0;
+static std::map<const llvm::Function *, Summary> _instances;
+
+Summary & Summary::get(const llvm::Function * f) {
+    std::map<const llvm::Function *, Summary>::iterator summ_it = _instances.find(f);
+    if (summ_it == _instances.end()) {
+        Summary summary;
+        summary.update(*f);
+        summ_it = _instances.insert(std::make_pair(f, summary)).first;
+    }
+    return summ_it->second;
+}
+
 
 Summary::Summary ()
         : _module(0) {}
@@ -29,7 +40,6 @@ void Summary::update(const llvm::Function & function) {
     for (it = function.begin(); it != function.end(); it++) {
         update(*it);
     }
-    ++runcount;
 }
 
 void Summary::update(const llvm::BasicBlock & basicBlock) {

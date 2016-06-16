@@ -181,9 +181,6 @@ private:
   /// (e.g. for a single STP query)
   double coreSolverTimeout;
 
-  /// A mapping between functions and their summaries.
-  std::map<const llvm::Function *, Summary> summaries;
-
   /// Assumes ownership of the created array objects
   ArrayCache arrayCache;
 

@@ -65,7 +65,9 @@ protected:
     virtual klee::ref<klee::Expr> _evaluate(const llvm::LoadInst & instruction);
     virtual klee::ref<klee::Expr> _evaluate(const llvm::Argument & argument) ;
     virtual klee::ref<klee::Expr> _evaluate(const llvm::GlobalValue & globalValue);
+
 public:
+    static Summary & get(const llvm::Function * f);
     Summary();
     // Summary(const Summary &) = default;
     // Summary(Summary &&) = default;
