@@ -7,6 +7,7 @@
 #include <ostream>
 
 #include "klee/Common.h"
+#include "klee/Constraints.h"
 
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instruction.h>
@@ -77,11 +78,11 @@ public:
     // TODO(oanson) Make these methods consts
     bool hasReturnValue() const ;
     // Representatives of the arguments
-    std::vector<klee::ref<klee::Expr> > & arguments();
+    const std::vector<klee::ref<klee::Expr> > & arguments() const;
     // Representatives of globals
     const std::map<const llvm::GlobalValue *, klee::ref<klee::Expr> > & globals() const;
     // The return value
-    klee::ref<klee::Expr> & returnValue() ;
+    const klee::ref<klee::Expr> & returnValue() const;
     // Modified memory addresses, and their values
     std::map<klee::ref<klee::Expr>, klee::ref<klee::Expr> > & modifiedMemory();
     // The function being summarised
@@ -97,7 +98,8 @@ protected:
 	std::map<klee::ref<klee::PureSymbolicExpr>, klee::ref<klee::Expr> > _symbolics;
 public:
 	const Summary & summary;
-	SummaryExecution(Summary & summary);
+	const klee::ConstraintManager constraints;
+	SummaryExecution(const Summary & summary, const klee::ConstraintManager & constraints);
 	const std::map<klee::ref<klee::ArgumentExpr>, klee::ref<klee::Expr> > & arguments() const;
 	const std::map<klee::ref<klee::PureSymbolicExpr>, klee::ref<klee::Expr> > & symbolics() const;
 

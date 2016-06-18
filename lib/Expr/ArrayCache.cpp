@@ -7,12 +7,14 @@ ArrayCache::~ArrayCache() {
   for (ArrayHashMap::iterator ai = cachedSymbolicArrays.begin(),
                               e = cachedSymbolicArrays.end();
        ai != e; ++ai) {
-    delete *ai;
+    //TODO XXX FIXME (oanson) VERY VERY BAD. FIX THIS.
+    //delete *ai;
   }
   for (ArrayPtrVec::iterator ai = concreteArrays.begin(),
                              e = concreteArrays.end();
        ai != e; ++ai) {
-    delete *ai;
+    //TODO XXX FIXME (oanson) VERY VERY BAD. FIX THIS.
+    //delete *ai;
   }
 }
 

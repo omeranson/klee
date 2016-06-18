@@ -690,7 +690,7 @@ bool Summary::hasReturnValue() const {
     return _hasReturnValue;
 }
 
-std::vector<klee::ref<klee::Expr> > & Summary::arguments() {
+const std::vector<klee::ref<klee::Expr> > & Summary::arguments() const {
     return _arguments;
 }
 
@@ -699,7 +699,7 @@ const std::map<const llvm::GlobalValue *, klee::ref<klee::Expr> > & Summary::glo
 }
 
 // The return value
-klee::ref<klee::Expr> & Summary::returnValue() {
+const klee::ref<klee::Expr> & Summary::returnValue() const {
     return _returnValue;
 }
 
@@ -769,7 +769,9 @@ void Summary::debug() const {
 
 /** SummaryExecution **/
 
-SummaryExecution::SummaryExecution(Summary & summary) : summary(summary) {}
+SummaryExecution::SummaryExecution(const Summary & summary, const klee::ConstraintManager & constraints) :
+		summary(summary), constraints(constraints) {}
+
 const std::map<klee::ref<klee::ArgumentExpr>, klee::ref<klee::Expr> > & SummaryExecution::arguments() const {
 	return _arguments;
 }

@@ -1215,11 +1215,11 @@ protected:
 public:
     SummaryExecution execution;
 
-    ArgumentExprVisitor(Summary & summary,
+    ArgumentExprVisitor(Summary & summary, ConstraintManager & constraints,
     		ArrayCache & arrayCache,
     		std::vector< ref<Expr> > &arguments,
 		std::map<const llvm::GlobalValue*, ref<klee::ConstantExpr> > & globalAddresses)
-		: ExprVisitor(), _arrayCache(arrayCache), execution(summary) {
+		: ExprVisitor(), _arrayCache(arrayCache), execution(summary, constraints) {
 	for (unsigned idx = 0; idx < arguments.size(); idx++) {
 		_arguments.insert(std::make_pair(summary.arguments()[idx], arguments[idx]));
 	}
@@ -1262,7 +1262,7 @@ void Executor::doSummariseFunction(KInstruction * ki, ExecutionState & state, Fu
     summary.debug();
     assert(arguments.size() == summary.arguments().size() && "Argument size mismatch");
 
-    ArgumentExprVisitor visitor = ArgumentExprVisitor(summary, arrayCache, arguments, globalAddresses);
+    ArgumentExprVisitor visitor = ArgumentExprVisitor(summary, state.constraints, arrayCache, arguments, globalAddresses);
     std::vector<klee::ref<klee::Expr> >::const_iterator args_it;
     for (args_it = summary.arguments().begin(); args_it != summary.arguments().end(); args_it++) {
         visitor.visit(*args_it);
@@ -1561,6 +1561,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     
     if (state.stack.size() <= 1) {
       assert(!caller && "caller set on initial stack frame");
+      compareWithSummaryExecution(state, result);
       terminateStateOnExit(state);
     } else {
       state.popFrame();
@@ -2795,6 +2796,7 @@ void Executor::run(ExecutionState &initialState) {
 
   searcher->update(0, states, std::set<ExecutionState*>());
 
+
   while (!states.empty() && !haltExecution) {
     ExecutionState &state = searcher->selectState();
     KInstruction *ki = state.pc;
@@ -3021,30 +3023,68 @@ void Executor::terminateStateOnError(ExecutionState &state,
  * Then we have to store this information, so that we can go back to the
  * summarised function and re-test it with the conditions.
  */
-	std::stringstream ss;
-	ss << "Summaries:\n";
-	std::list<SummaryExecution>::const_iterator it;
-	for (it = state.summaries.begin(); it != state.summaries.end(); it++) {
-		const SummaryExecution & execution = *it;
-		const Summary & summary = execution.summary;
-		ss << "\t" << summary.function().getName().str() << ": " <<
-				summary << "\n";
-		ss << "\t\tArguments:\n";
-		std::transform(execution.arguments().begin(), execution.arguments().end(),
-		          std::ostream_iterator<std::string>(ss, "\n"),
-			  toString<klee::ref<klee::ArgumentExpr>, klee::ref<klee::Expr> >);
-		ss << "\t\tSymbolics:\n";
-		std::transform(execution.symbolics().begin(), execution.symbolics().end(),
-		          std::ostream_iterator<std::string>(ss, "\n"),
-			  toString<klee::ref<klee::PureSymbolicExpr>, klee::ref<klee::Expr> >);
-	}
-	ss << "Constraints:\n" << state.constraints;
-	msg << ss.str();
-
+    bool isFalsePositive = false;
+    ConstraintManager constraints = state.constraints;
     interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
+    std::list<SummaryExecution>::const_reverse_iterator it;
+    for (it = state.summaries.rbegin(); it != state.summaries.rend(); it++) {
+        SummaryReExecutor re_executor(*this, *it, constraints);
+	const Function * f = &it->summary.function();
+	//klee_message("Reviewing summary of: %s", f->getName().str().c_str());
+	KFunction *kf = kmodule->functionMap[const_cast<Function*>(f)];
+	ExecutionState * new_state = new ExecutionState(kf);
+	new_state->constraints = it->constraints;
+	bindSummaryArguments(*new_state, kf, f, *it);
+	re_executor.processTree = new PTree(new_state);
+	new_state->ptreeNode = re_executor.processTree->root;
+	re_executor.run(*new_state);
+	if (re_executor.newConstraints().empty()) {
+		klee_message("False positive detected");
+		isFalsePositive = true;
+		break;
+	}
+	ref<Expr> constraint = re_executor.newConstraints()[0];
+	for (unsigned idx = 1; idx < re_executor.newConstraints().size(); idx++) {
+		constraint = OrExpr::create(constraint, re_executor.newConstraints()[idx]);
+	}
+	constraints.addConstraint(constraint);
+    }
+
+    if (!isFalsePositive) {
+	klee_message("True positive detected");
+	state.constraints.addConstraints(constraints);
+	printTruePositive(state);
+    }
   }
     
   terminateState(state);
+}
+
+void Executor::printTruePositive(ExecutionState & state) {
+	std::list<SummaryExecution>::const_iterator it;
+	for (it = state.summaries.begin(); it != state.summaries.end(); it++) {
+		std::map<klee::ref<klee::ArgumentExpr>, klee::ref<klee::Expr> >::const_iterator args_it;
+		for (args_it = it->arguments().begin(); args_it != it->arguments().end(); args_it++) {
+			ref<ConstantExpr> value;
+			bool success = solver->getValue(state, args_it->second, value);
+			assert(success && "FIXME: Unhandled solver failure");
+			std::stringstream ss;
+			ss << "Function: " << it->summary.function().getName().str() << ": Argument: " << args_it->first << " Value: " << value;
+			klee_message("\t%s\n", ss.str().c_str());
+		}
+	}
+}
+
+void Executor::bindSummaryArguments(ExecutionState & state, KFunction * kf, const Function * f, const SummaryExecution & execution) {
+	const Summary & summary = execution.summary;
+	const std::vector<klee::ref<klee::Expr> > & arguments =
+			summary.arguments();
+	for (unsigned i = 0, e = f->arg_size(); i != e; ++i) {
+		ref<ArgumentExpr> summaryArg = &static_cast<ArgumentExpr&>(
+				*const_cast<ref<Expr>& >(arguments[i]));
+		ref<Expr> argument = execution.arguments().find(summaryArg)->second;
+		bindArgument(kf, i, state, argument);
+	}
 }
 
 // XXX shoot me
@@ -3810,6 +3850,104 @@ void Executor::doImpliedValueConcretization(ExecutionState &state,
       }
     }
   }
+}
+
+SummaryReExecutor::SummaryReExecutor(const Executor & executor, const SummaryExecution & summaryExecution, const ConstraintManager & constraints) : 
+		Executor(executor), _summaryExecution(summaryExecution), _constraints(constraints) {
+	searcher = 0;
+	statsTracker = 0; // TODO Re-enable statistics
+	states.clear();
+	addedStates.clear();
+	removedStates.clear();
+}
+
+SummaryReExecutor::~SummaryReExecutor() {
+	memory = 0;
+	externalDispatcher = 0;
+	processTree = 0;
+	specialFunctionHandler = 0;
+	statsTracker = 0;
+	solver = 0;
+	kmodule = 0;
+	timers.clear();
+}
+
+class SummaryExecutionVisitor : public ExprVisitor {
+protected:
+    const SummaryExecution & _execution;
+public:
+
+    SummaryExecutionVisitor(const SummaryExecution & execution) :
+		_execution(execution) {}
+
+    virtual Action visitArgument(const ArgumentExpr& argumentExpr) {
+	std::map< ref<ArgumentExpr>, ref<Expr> >::const_iterator it;
+	it = _execution.arguments().find(
+			&(const_cast<ArgumentExpr&>(argumentExpr)));
+	assert(it != _execution.arguments().end());
+	return Action::changeTo(it->second);
+    }
+
+    virtual Action visitPureSymbolic(const PureSymbolicExpr& pureSymbolicExpr) {
+	std::map< ref<PureSymbolicExpr>, ref<Expr> >::const_iterator it;
+	it = _execution.symbolics().find(
+			&(const_cast<PureSymbolicExpr&>(pureSymbolicExpr)));
+	assert(it != _execution.symbolics().end());
+	return Action::changeTo(it->second);
+    }
+};
+
+void SummaryReExecutor::compareWithSummaryExecution(ExecutionState &state, ref<Expr> returnValue) {
+	// Algo:
+	//   1. Unify the constraints in the state now, and the constraints in the
+	//   constraints at the failure in the summarised branch, and the constraint
+	//   result == summaryExecution.returnValue
+	//   2. Test if result has a valid model
+	//   3. Display model and extract example
+	//   4. Mark for symbolic execution caller to know model exists 
+	// Subclass executor -> SummaryReExecutor.
+	// Keep this class empty but virtual in Executor
+	// In subclass:
+	// 	Construct from Executor
+	// 	List of models/examples/etc.
+	// 	If there is a model add it to list
+	// 	In caller, after execution, if list not empty - print it again (for debugging)
+	const SummaryExecution & summaryExecution = _summaryExecution;
+	ref<Expr> expr = ConstantExpr::alloc(1, Expr::Bool);
+	ConstraintManager::constraint_iterator constraint_it;
+	for (constraint_it = _constraints.begin(); constraint_it != _constraints.end(); constraint_it++) {
+		expr = AndExpr::create(expr, *constraint_it);
+	}
+	const ref<Expr> & returnValueSummary = summaryExecution.summary.returnValue();
+	SummaryExecutionVisitor visitor(summaryExecution);
+	expr = AndExpr::create(expr, EqExpr::create(
+					returnValue,
+					visitor.visit(returnValueSummary)));
+	// TODO See if we can do this only for possible true positives.
+	// TODO See if we can mark when a possible true positive is detected, and 'bail out' from testing other summary executions otherwise.
+	bool res;
+	bool success = solver->mayBeTrue(state, expr, res);
+	assert(success && "FIXME: Unhandled solver failure");
+	if (!res) {
+		// This branch is a false positive (but there may be others)
+		return;
+	}
+	// TODO Shouldn't we OR all constraints from different branches?
+	ref<Expr> stateConstraints = state.constraints.asExpr();
+	ref<Expr> newConstraint = AndExpr::create(stateConstraints, expr);
+	_newConstraints.push_back(newConstraint);
+}
+
+const std::vector<ref<Expr> > & SummaryReExecutor::newConstraints() {
+	return _newConstraints;
+}
+
+bool SummaryReExecutor::isAlsoSummariseFunction(const std::string & name) const {
+	return false;
+}
+
+bool SummaryReExecutor::isAlsoSummariseFunction(llvm::Function * f) const {
+	return false;
 }
 
 Expr::Width Executor::getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const {

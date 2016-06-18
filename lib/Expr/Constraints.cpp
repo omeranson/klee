@@ -100,6 +100,14 @@ void ConstraintManager::simplifyForValidConstraint(ref<Expr> e) {
   // XXX 
 }
 
+ref<Expr> ConstraintManager::asExpr() const {
+	ref<Expr> result = ConstantExpr::alloc(1, Expr::Bool);
+	for (constraint_iterator it = begin(); it != end(); it++) {
+		result = AndExpr::create(result, *it);
+	}
+	return result;
+}
+
 ref<Expr> ConstraintManager::simplifyExpr(ref<Expr> e) const {
   if (isa<ConstantExpr>(e))
     return e;
@@ -168,4 +176,10 @@ void ConstraintManager::addConstraintInternal(ref<Expr> e) {
 void ConstraintManager::addConstraint(ref<Expr> e) {
   e = simplifyExpr(e);
   addConstraintInternal(e);
+}
+
+void ConstraintManager::addConstraints(const ConstraintManager & constraints) {
+	for (constraint_iterator it = constraints.begin(); it != constraints.end(); it++) {
+		addConstraint(*it);
+	}
 }

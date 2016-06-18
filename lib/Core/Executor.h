@@ -101,7 +101,7 @@ public:
 
   typedef std::pair<ExecutionState*,ExecutionState*> StatePair;
 
-private:
+protected:
   class TimerInfo;
 
   KModule *kmodule;
@@ -217,6 +217,7 @@ private:
   ObjectState *bindObjectInState(ExecutionState &state, const MemoryObject *mo,
                                  bool isLocal, const Array *array = 0);
 
+  void bindSummaryArguments(ExecutionState & state, KFunction * kf, const llvm::Function * f, const SummaryExecution & execution);
   /// Resolve a pointer to the memory objects it could point to the
   /// start of, forking execution when necessary and generating errors
   /// for pointers to invalid locations (either out of bounds or
@@ -360,6 +361,8 @@ private:
   void terminateStateEarly(ExecutionState &state, const llvm::Twine &message);
   // call exit handler and terminate state
   void terminateStateOnExit(ExecutionState &state);
+
+  virtual void compareWithSummaryExecution(ExecutionState &state, ref<Expr> returnValue) {};
   // call error handler and terminate state
   void terminateStateOnError(ExecutionState &state, 
                              const llvm::Twine &message,
@@ -404,9 +407,10 @@ private:
                      double maxInstTime);
   void checkMemoryUsage();
 
-  bool isAlsoSummariseFunction(const std::string & name) const;
-  bool isAlsoSummariseFunction(llvm::Function * f) const;
+  virtual bool isAlsoSummariseFunction(const std::string & name) const;
+  virtual bool isAlsoSummariseFunction(llvm::Function * f) const;
   void doSummariseFunction(KInstruction * ki, ExecutionState & state, llvm::Function * f, std::vector< ref<Expr> > &arguments) ;
+  void printTruePositive(ExecutionState & state);
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);
   virtual ~Executor();
@@ -481,6 +485,22 @@ public:
   Expr::Width getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const;
 };
   
+class SummaryReExecutor : public Executor {
+protected:
+	const SummaryExecution & _summaryExecution;
+	const ConstraintManager & _constraints;
+	std::vector<ref<Expr> > _newConstraints;
+
+	virtual void compareWithSummaryExecution(ExecutionState &state, ref<Expr> returnValue);
+public:
+	SummaryReExecutor(const Executor & executor, const SummaryExecution & summaryExecution, const ConstraintManager & constraints);
+	virtual ~SummaryReExecutor();
+	const std::vector<ref<Expr> > & newConstraints();
+	virtual bool isAlsoSummariseFunction(const std::string & name) const;
+	virtual bool isAlsoSummariseFunction(llvm::Function * f) const;
+};
+
+
 } // End klee namespace
 
 #endif

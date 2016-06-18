@@ -42,8 +42,10 @@ public:
   void simplifyForValidConstraint(ref<Expr> e);
 
   ref<Expr> simplifyExpr(ref<Expr> e) const;
+  ref<Expr> asExpr() const;
 
   void addConstraint(ref<Expr> e);
+  void addConstraints(const ConstraintManager & constraints);
   
   bool empty() const {
     return constraints.empty();
