@@ -84,7 +84,7 @@ public:
     // The return value
     const klee::ref<klee::Expr> & returnValue() const;
     // Modified memory addresses, and their values
-    std::map<klee::ref<klee::Expr>, klee::ref<klee::Expr> > & modifiedMemory();
+    const std::map<klee::ref<klee::Expr>, klee::ref<klee::Expr> > & modifiedMemory() const;
     // The function being summarised
     const llvm::Function & function() const;
 
