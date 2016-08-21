@@ -139,6 +139,23 @@ int klee_range(int begin, int end, const char* name) {
   return x;
 }
 
+int klee_int(const char *name) {
+  int x;
+  klee_make_symbolic(&x, sizeof x, name);
+  return x;
+}
+
+#define DEFAULT_SIZE 16
+
+char * klee_string(size_t size, const char * name) {
+  if (size == 0) {
+    size = DEFAULT_SIZE;
+  }
+  char * buffer = (char *)malloc(sizeof(char)*size);
+  klee_make_symbolic(buffer, size*sizeof(char), name);
+  return buffer;
+}
+
 /* not sure we should even define.  is for debugging. */
 void klee_print_expr(const char *msg, ...) { }
 
