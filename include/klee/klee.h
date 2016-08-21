@@ -51,6 +51,21 @@ extern "C" {
    */
   int klee_int(const char *name);
 
+  /* KLEE_SYMBOLIC_VALUE - Construct a symbolic value of the given type
+   * \arg type - The type of the value
+   * \arg name - An optional name, see klee_make_symbolic
+   */
+# define KLEE_SYMBOLIC_VALUE(type, name) { 				\
+	type result;							\
+	klee_make_symbolic(&result, sizeof(type), name);		\
+	result; }
+
+  /*  klee_string - Construct an unconstrained symbolic string.
+   * \arg name - An optional name, see klee_make_symbolic
+   * \arg size - An optional size (0 for default).
+   */
+  char * klee_string(size_t size, const char * name);
+
   /* klee_silent_exit - Terminate the current KLEE process without generating a
    * test file.
    */
