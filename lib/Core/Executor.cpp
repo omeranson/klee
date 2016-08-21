@@ -3034,12 +3034,17 @@ void Executor::terminateStateOnError(ExecutionState &state,
 	KFunction *kf = kmodule->functionMap[const_cast<Function*>(f)];
 	ExecutionState * new_state = new ExecutionState(kf);
 	new_state->constraints = it->constraints;
+	// Copy symbolics
+	std::vector<std::pair<const MemoryObject *, const Array *> >::iterator symit;
+	for (symit = state.symbolics.begin(); symit != state.symbolics.end(); it++) {
+		new_state->addSymbolic(symit->first, symit->second);
+	}
 	bindSummaryArguments(*new_state, kf, f, *it);
 	re_executor.processTree = new PTree(new_state);
 	new_state->ptreeNode = re_executor.processTree->root;
 	re_executor.run(*new_state);
 	if (re_executor.newConstraints().empty()) {
-		klee_message("False positive detected");
+		klee_message("False positive detected: %s", msg.str().c_str());
 		isFalsePositive = true;
 		break;
 	}
@@ -3051,7 +3056,7 @@ void Executor::terminateStateOnError(ExecutionState &state,
     }
 
     if (!isFalsePositive) {
-	klee_message("True positive detected");
+	klee_message("True positive detected: %s", msg.str().c_str());
 	state.constraints.addConstraints(constraints);
 	printTruePositive(state);
     }
@@ -3930,8 +3935,14 @@ void SummaryReExecutor::compareWithSummaryExecution(ExecutionState &state, ref<E
 	assert(success && "FIXME: Unhandled solver failure");
 	if (!res) {
 		// This branch is a false positive (but there may be others)
+		std::stringstream ss;
+		ss << "False positive branch: " << expr << " " << state.constraints;
+		klee_message("%s\n", ss.str().c_str());
 		return;
 	}
+	std::stringstream ss;
+	ss << "True positive branch: " << expr << " " << state.constraints;
+	klee_message("%s\n", ss.str().c_str());
 	// TODO Shouldn't we OR all constraints from different branches?
 	ref<Expr> stateConstraints = state.constraints.asExpr();
 	ref<Expr> newConstraint = AndExpr::create(stateConstraints, expr);
