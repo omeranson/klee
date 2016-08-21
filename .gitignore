@@ -6,6 +6,7 @@ Output/
 
 cscope.*
 *~
+*.swp
 
 *.log
 *.sum
