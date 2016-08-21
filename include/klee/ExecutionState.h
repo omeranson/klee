@@ -145,6 +145,13 @@ public:
   void addFnAlias(std::string old_fn, std::string new_fn);
   void removeFnAlias(std::string fn);
 
+  /// @brief path A vector of booleans stating which path was selected at each
+  /// condition
+  std::vector<bool> path_latest;
+
+  /// @brief path_c A vector of conditions. During a branch, this condition
+  /// must be true for the branch to be selected.
+  std::vector<ref<Expr> > path_c_latest;
 private:
   ExecutionState() : ptreeNode(0) {}
 

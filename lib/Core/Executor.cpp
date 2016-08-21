@@ -314,6 +314,12 @@ namespace {
   MaxMemoryInhibit("max-memory-inhibit",
             cl::desc("Inhibit forking at memory cap (vs. random terminate) (default=on)"),
             cl::init(true));
+
+  cl::opt<bool>
+  UseLATESTAlgorithm("use-LATEST-algorithm",
+		      cl::init(false),
+                      cl::desc("Use the LATEST algorithm, as appearing in the paper: 'LATEST : Lazy Dynamic Test Input Generation'"));
+
 }
 
 
@@ -901,6 +907,10 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
+    if (UseLATESTAlgorithm) {
+      current.path_latest.push_back(true);
+      current.path_c_latest.push_back(condition);
+    }
     return StatePair(&current, 0);
   } else if (res==Solver::False) {
     if (!isInternal) {
@@ -909,6 +919,10 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
+    if (UseLATESTAlgorithm) {
+      current.path_latest.push_back(false);
+      current.path_c_latest.push_back(NotExpr::create(condition));
+    }
     return StatePair(0, &current);
   } else {
     TimerStatIncrementer timer(stats::forkTime);
@@ -974,6 +988,13 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
 
     addConstraint(*trueState, condition);
     addConstraint(*falseState, Expr::createIsZero(condition));
+
+    if (UseLATESTAlgorithm) {
+      trueState->path_latest.push_back(true);
+      trueState->path_c_latest.push_back(condition);
+      falseState->path_latest.push_back(false);
+      falseState->path_c_latest.push_back(NotExpr::create(condition));
+    }
 
     // Kinda gross, do we even really still want this option?
     if (MaxDepth && MaxDepth<=trueState->depth) {
