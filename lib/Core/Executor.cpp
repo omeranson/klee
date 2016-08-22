@@ -765,6 +765,20 @@ void Executor::branch(ExecutionState &state,
   for (unsigned i=0; i<N; ++i)
     if (result[i])
       addConstraint(*result[i], conditions[i]);
+
+  if (UseLATESTAlgorithm) {
+    for (unsigned i=0; i<N; ++i) {
+      if (!result[i]) {
+        continue;
+      }
+      for (unsigned j = 0; j < i; j++) {
+        result[i]->path_latest.push_back(false);
+        result[i]->path_c_latest.push_back(NotExpr::create(conditions[j]));
+      }
+      result[i]->path_latest.push_back(true);
+      result[i]->path_c_latest.push_back(conditions[i]);
+    }
+  }
 }
 
 Executor::StatePair 
