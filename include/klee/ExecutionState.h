@@ -152,6 +152,11 @@ public:
   /// @brief path_c A vector of conditions. During a branch, this condition
   /// must be true for the branch to be selected.
   std::vector<ref<Expr> > path_c_latest;
+
+  /// @brief nonLATESTExecutionDepth The depth in a function call that is being
+  /// executed, despite the use of LATEST algorith. This counts the depth, so
+  /// we know to call nested functions as well.
+  unsigned nonLATESTExecutionDepth;
 private:
   ExecutionState() : ptreeNode(0) {}
 

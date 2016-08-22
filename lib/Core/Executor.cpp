@@ -1557,6 +1557,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     Instruction *caller = kcaller ? kcaller->inst : 0;
     bool isVoidReturn = (ri->getNumOperands() == 0);
     ref<Expr> result = ConstantExpr::alloc(0, Expr::Bool);
+
+    if (UseLATESTAlgorithm) {
+      --state.nonLATESTExecutionDepth;
+    }
     
     if (!isVoidReturn) {
       result = eval(ki, 0, state).value;
@@ -1815,6 +1819,23 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       terminateStateOnExecError(state, "inline assembly is unsupported");
       break;
     }
+    // LATEST algorithm
+    // Replace with call to klee_int. However, if already begins with klee, is
+    // __assert_fail, exit, _exit, etc., keep the original execution, incl.
+    // nested calls
+    if (UseLATESTAlgorithm) {
+      if (LATESTIsExecuteFunctionAnyway(state, f)) {
+        ++state.nonLATESTExecutionDepth;
+      } else {
+	// Return symbolic value the same width as the return value type
+        bool hasReturnValue = createSymbolicReturnValue(f, value);
+        if (hasReturnValue) {
+          bindLocal(ki, state, value);
+        }
+        break;
+      }
+    }
+
     // evaluate arguments
     std::vector< ref<Expr> > arguments;
     arguments.reserve(numArgs);
@@ -2591,6 +2612,43 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   }
 }
 
+bool Executor::LATESTIsExecuteFunctionAnyway(ExecutionState &state, Function *f) {
+  if (state.nonLATESTExecutionDepth) {
+    return true;
+  }
+  const char * name = f->getName().data();
+  if (strncmp(name, "klee_", sizeof("klee_")) == 0) {
+    // Functions beginning with klee_ are always executed
+    return true;
+  }
+  if (strcmp(name, "exit") == 0) {
+    return true;
+  }
+  if (strcmp(name, "_exit") == 0) {
+    return true;
+  }
+  if (strcmp(name, "__assert_fail") == 0) {
+    return true;
+  }
+  return false;
+}
+
+bool Executor::createSymbolicReturnValue(Function * f, ref<Expr> result) {
+  static unsigned counter = 0;
+  LLVM_TYPE_Q Type *returnType = f->getReturnType();
+  if (returnType == Type::getVoidTy(getGlobalContext())) {
+  	return false;
+  }
+  Expr::Width width = getWidthForLLVMType(returnType);
+  size_t size = Expr::getMinBytesForWidth(width);
+  std::stringstream ss;
+  ss << functionName << "_summary_" << counter++;
+  std::string & name = ss.str();
+  const Array *array = arrayCache.CreateArray(name, size);
+  result = Expr::createTempRead(array, width);
+  return true;
+}
+
 void Executor::updateStates(ExecutionState *current) {
   if (searcher) {
     searcher->update(current, addedStates, removedStates);
@@ -2973,6 +3031,60 @@ bool Executor::shouldExitOn(enum TerminateReason termReason) {
       return true;
 
   return false;
+}
+
+bool statePathFeasible(ExecutionState & state) {
+  if (!UseLATESTAlgorithm) {
+    return true;
+  }
+  // In theory, we have to re-run the execution. Whenever we arrive at a branch
+  // we re-execute exactly the previous selection made (we can just add the
+  // next constraint in path_c). When we reach a call, we symbolically execute
+  // the call with the constraints already in the state. ...
+  //
+  // We want to avoid creating a second Executor, since it doesn't come out
+  // pretty.
+  //
+  // We create a new state at the entry point, but already with all the
+  // constraints. We have to make sure that calls to klee_make_symbolic and
+  // wrappers unify with the previous ones (Let's assume this happens). 
+  // This new state will follow the pattern of replayPath, only the replay path
+  // will exist on the state rather then the executor.
+  // When we reached a function that was previously 'summarised', it now has to
+  // be executed. How do we know which functions to execute, and which to
+  // summarise? If during replay - execute the function. Otherwise, summarise.
+  // Upon terminate state: If we need to test feasibility, save state in
+  // question inside new state, and print the info upon that state's
+  // termination.
+  //
+  // A state is feasible if no functions were summarised.
+  //
+  // Action items:
+  // 	* Upon terminate state: Don't delete the state.
+  // 	  * WRONG. We clone the state instead.
+  // 	* We need seedMap information before calling terminateState
+  // 	* Replay the state. As in replayPath
+  // 	  * Add replayPath to state (already done with path_latest)
+  // 	  * Add code to apply replayPath
+  // 	  * Add boolean to state whether we are in replay path context
+  // 	    * We know to set it back in Ret. There should be no internal calls
+  // 	  * Add pointer to current position in replay path
+  // 	* In callers to terminate state: Add terminating state to new state
+  //	  * With context: Type: Early, Exit, Error
+  //	   		  Data: message, Error context (see terminateStateOnError)
+  //	   		  Whether or not to call processTestCase if feasible
+  //	  * Or context: message, suffix, and whether or not to call processTestCase.
+  //	  * update emittedErrors if infeasible
+  //	* Same behaviour as before if UseLATESTAlgorithm is false.
+  /*
+  if (!statePathFeasible(state)) {
+    std::stringstream ss;
+    ss << "Path is not feasible: " << state.infeasibilityReason <<
+    		message.str() << "\n";
+    interpreterHandler->processTestCase(state, ss.str().c_str(),
+                                        "early.infeasible");
+  */
+  // If returns false, also update state.infeasibilityReason.
 }
 
 void Executor::terminateStateOnError(ExecutionState &state,
