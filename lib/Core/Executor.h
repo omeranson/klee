@@ -210,6 +210,9 @@ private:
   // @brief buffer to store logs before flushing to file
   llvm::raw_string_ostream debugLogBuffer;
 
+  // @brief Set of errors that were already emitted. (i.e. reported)
+  std::set< std::pair<Instruction*, std::string> > emittedErrors;
+
   llvm::Function* getTargetFunction(llvm::Value *calledVal,
                                     ExecutionState &state);
   
