@@ -1577,6 +1577,31 @@ static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
   }
 }
 
+void Executor::extendResult(ref<Expr> & result, Instruction *caller, LLVM_TYPE_Q Type *t) {
+  // may need to do coercion due to bitcasts
+  Expr::Width from = result->getWidth();
+  Expr::Width to = getWidthForLLVMType(t);
+
+  if (from != to) {
+    CallSite cs = (isa<InvokeInst>(caller) ? CallSite(cast<InvokeInst>(caller)) :
+        CallSite(cast<CallInst>(caller)));
+
+    // XXX need to check other param attrs ?
+#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
+    bool isSExt = cs.paramHasAttr(0, llvm::Attribute::SExt);
+#elif LLVM_VERSION_CODE >= LLVM_VERSION(3, 2)
+    bool isSExt = cs.paramHasAttr(0, llvm::Attributes::SExt);
+#else
+    bool isSExt = cs.paramHasAttr(0, llvm::Attribute::SExt);
+#endif
+    if (isSExt) {
+      result = SExtExpr::create(result, to);
+    } else {
+      result = ZExtExpr::create(result, to);
+    }
+  }
+}
+
 void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   Instruction *i = ki->inst;
   switch (i->getOpcode()) {
@@ -1637,27 +1662,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         LLVM_TYPE_Q Type *t = caller->getType();
         if (t != Type::getVoidTy(getGlobalContext())) {
           // may need to do coercion due to bitcasts
-          Expr::Width from = result->getWidth();
-          Expr::Width to = getWidthForLLVMType(t);
-            
-          if (from != to) {
-            CallSite cs = (isa<InvokeInst>(caller) ? CallSite(cast<InvokeInst>(caller)) : 
-                           CallSite(cast<CallInst>(caller)));
-
-            // XXX need to check other param attrs ?
-#if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
-      bool isSExt = cs.paramHasAttr(0, llvm::Attribute::SExt);
-#elif LLVM_VERSION_CODE >= LLVM_VERSION(3, 2)
-	    bool isSExt = cs.paramHasAttr(0, llvm::Attributes::SExt);
-#else
-	    bool isSExt = cs.paramHasAttr(0, llvm::Attribute::SExt);
-#endif
-            if (isSExt) {
-              result = SExtExpr::create(result, to);
-            } else {
-              result = ZExtExpr::create(result, to);
-            }
-          }
+          extendResult(result, caller, t);
 
           if (UseLATESTAlgorithm && wasReplayFunction) {
             StackFrame &sf = state.stack.back();

@@ -448,6 +448,8 @@ private:
   bool createSymbolicReturnValue(llvm::Function*, ref<Expr>&);
   void terminateStateOnReplayDone(ExecutionState & state);
   void terminateStateOnReplayFailed(ExecutionState & state);
+  void extendResult(ref<Expr> & result, llvm::Instruction *caller,
+               LLVM_TYPE_Q llvm::Type *t);
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);
   virtual ~Executor();

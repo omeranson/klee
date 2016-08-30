@@ -22,6 +22,12 @@ int _strcmp(char *str1, char *str2) {
 	return *str1 - *str2;
 }
 
+int global = 0;
+int strcmp_wrapper(char * str1, char * str2) {
+	global++;
+	return _strcmp(str1, str2);
+}
+
 void testme() {
 	int tmp1, tmp2;
 	char *s1, * s2;
@@ -29,8 +35,8 @@ void testme() {
 	char *const2 = "Hello ESEC/FSE";
 	s1 = klee_string(16, "s1");
 	s2 = klee_string(16, "s2");
-	tmp1 = _strcmp(s1,const1);
-	tmp2 = _strcmp(s2,const2);
+	tmp1 = strcmp_wrapper(s1,const1);
+	tmp2 = strcmp_wrapper(s2,const2);
 	if (tmp1 == 0)
 	{
 		if (tmp2 == 0)
