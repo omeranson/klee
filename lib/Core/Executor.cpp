@@ -1577,10 +1577,11 @@ static inline const llvm::fltSemantics * fpWidthToSemantics(unsigned width) {
   }
 }
 
-void Executor::extendResult(ref<Expr> & result, Instruction *caller, LLVM_TYPE_Q Type *t) {
+void Executor::extendResult(ref<Expr> & result, Instruction *caller) {
   // may need to do coercion due to bitcasts
+
   Expr::Width from = result->getWidth();
-  Expr::Width to = getWidthForLLVMType(t);
+  Expr::Width to = getWidthForLLVMType(caller->getType());
 
   if (from != to) {
     CallSite cs = (isa<InvokeInst>(caller) ? CallSite(cast<InvokeInst>(caller)) :
@@ -1614,6 +1615,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     ref<Expr> result = ConstantExpr::alloc(0, Expr::Bool);
 
     klee_message("Ret instruction. Function: %s, Stack size: %lu, isInReplay: %d", state.stack.back().kf->function->getName().str().c_str(), state.stack.size(), state.isInReplay);
+
     bool wasReplayFunction = true;
     if (UseLATESTAlgorithm) {
       if (state.nonLATESTExecutionDepth) {
@@ -1635,6 +1637,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     if (!isVoidReturn) {
       result = eval(ki, 0, state).value;
     }
+
     std::stringstream ss;
     ss << result;
     klee_message("Ret instruction. result: %s, cell: %d",
@@ -1659,10 +1662,9 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       }
 
       if (!isVoidReturn) {
-        LLVM_TYPE_Q Type *t = caller->getType();
-        if (t != Type::getVoidTy(getGlobalContext())) {
+        if (caller->getType() != Type::getVoidTy(getGlobalContext())) {
           // may need to do coercion due to bitcasts
-          extendResult(result, caller, t);
+          extendResult(result, caller);
 
           if (UseLATESTAlgorithm && wasReplayFunction) {
             StackFrame &sf = state.stack.back();
