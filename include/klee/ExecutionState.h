@@ -22,6 +22,10 @@
 #include <set>
 #include <vector>
 
+namespace llvm {
+  class Instruction;
+}
+
 namespace klee {
 class Array;
 class CallPathNode;
@@ -31,6 +35,11 @@ struct KInstruction;
 class MemoryObject;
 class PTreeNode;
 struct InstructionInfo;
+typedef enum {
+	ExecutionStateReplayState_NoReplay = 0, // "Normal" LATEST algorithm
+	ExecutionStateReplayState_Replay,	// replay in LATEST algorithm
+	ExecutionStateReplayState_Invoking	// Invoking a build function
+} ExecutionStateReplayState;
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const MemoryMap &mm);
 
@@ -55,6 +64,25 @@ struct StackFrame {
   // does not pass vaarg through as expected). VACopy is lowered inside
   // of intrinsic lowering.
   MemoryObject *varargs;
+
+  /// @brief path A vector of booleans stating which path was selected at each
+  /// condition
+  std::vector<bool> path_latest;
+
+  /// @brief path_c A vector of conditions. During a branch, this condition
+  /// must be true for the branch to be selected.
+  std::vector<ref<Expr> > path_c_latest;
+
+  /// @brief The current location on the path.
+  unsigned replayPosition;
+
+  /// @brief results A vecotro of the return values of functions called from
+  /// this function
+  std::vector<ref<Expr> > results;
+
+  /// @brief resultsPosition The position of the result of the next function
+  /// that will be called.
+  unsigned resultsPosition;
 
   StackFrame(KInstIterator caller, KFunction *kf);
   StackFrame(const StackFrame &s);
@@ -145,18 +173,27 @@ public:
   void addFnAlias(std::string old_fn, std::string new_fn);
   void removeFnAlias(std::string fn);
 
-  /// @brief path A vector of booleans stating which path was selected at each
-  /// condition
-  std::vector<bool> path_latest;
+  /// @brief isReplayState This state is part of a replay
+  bool isReplayState;
 
-  /// @brief path_c A vector of conditions. During a branch, this condition
-  /// must be true for the branch to be selected.
-  std::vector<ref<Expr> > path_c_latest;
-
+  /// @brief replayMessage In case of errors, the instruction+message will be
+  /// used to identify that the same error has been reached.
+  std::pair<llvm::Instruction*, std::string> replayErrorMessage;
   /// @brief nonLATESTExecutionDepth The depth in a function call that is being
   /// executed, despite the use of LATEST algorith. This counts the depth, so
   /// we know to call nested functions as well.
   unsigned nonLATESTExecutionDepth;
+
+  /// @brief The state is during replay as per LATEST algorithm
+  ExecutionStateReplayState isInReplay;
+
+  /// @brief msg The error message with which to terminate this replay state.
+  std::string message;
+
+  /// @brief suffix The file suffix to which the error message of this
+  /// terminated replay state goes.
+  std::string suffix;
+  
 private:
   ExecutionState() : ptreeNode(0) {}
 

@@ -6,7 +6,7 @@
 /*
 #define BUFFER_SIZE 16
 
-char * input(const char * name) {
+char * klee_string1(const char * name) {
 	size_t size = BUFFER_SIZE*sizeof(char);
 	char * buffer = (char*)malloc(size);
 	klee_make_symbolic(buffer, size, name);
@@ -27,8 +27,8 @@ void testme() {
 	char *s1, * s2;
 	char *const1 = "Hello World";
 	char *const2 = "Hello ESEC/FSE";
-	s1 = klee_string("s1");
-	s2 = klee_string("s2");
+	s1 = klee_string(16, "s1");
+	s2 = klee_string(16, "s2");
 	tmp1 = _strcmp(s1,const1);
 	tmp2 = _strcmp(s2,const2);
 	if (tmp1 == 0)
@@ -36,7 +36,7 @@ void testme() {
 		if (tmp2 == 0)
 		{
 			printf("Success");
-			__assert_fail("Success", __FILE__, __LINE__, __func__);
+			__assert_fail("Success", __FILE__, __LINE__, __PRETTY_FUNCTION__);
 		}
 	}
 }

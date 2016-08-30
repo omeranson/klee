@@ -688,6 +688,7 @@ void Executor::branch(ExecutionState &state,
   unsigned N = conditions.size();
   assert(N);
 
+  assert((!state.isInReplay) && "State replay not supported for branch");
   if (MaxForks!=~0u && stats::forks >= MaxForks) {
     unsigned next = theRNG.getInt32() % N;
     for (unsigned i=0; i<N; ++i) {
@@ -771,14 +772,30 @@ void Executor::branch(ExecutionState &state,
       if (!result[i]) {
         continue;
       }
+      StackFrame &sf = result[i]->stack.back();
       for (unsigned j = 0; j < i; j++) {
-        result[i]->path_latest.push_back(false);
-        result[i]->path_c_latest.push_back(NotExpr::create(conditions[j]));
+        sf.path_latest.push_back(false);
+        sf.path_c_latest.push_back(NotExpr::create(conditions[j]));
       }
-      result[i]->path_latest.push_back(true);
-      result[i]->path_c_latest.push_back(conditions[i]);
+      sf.path_latest.push_back(true);
+      sf.path_c_latest.push_back(conditions[i]);
     }
   }
+}
+
+bool Executor::isReplayPath(ExecutionState &state) {
+  return ((replayPath != 0) || (state.isInReplay == ExecutionStateReplayState_Replay));
+}
+
+bool Executor::getReplayPathBranch(ExecutionState & state) {
+  StackFrame &sf = state.stack.back();
+  assert(((sf.replayPosition<sf.path_latest.size()) ||
+  		(replayPath && (replayPosition<replayPath->size()))) &&
+             "ran out of branches in replay path mode");
+  if (replayPath) {
+    return (*replayPath)[replayPosition++];
+  }
+  return sf.path_latest[sf.replayPosition++];
 }
 
 Executor::StatePair 
@@ -828,17 +845,22 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   }
 
   if (!isSeeding) {
-    if (replayPath && !isInternal) {
-      assert(replayPosition<replayPath->size() &&
-             "ran out of branches in replay path mode");
-      bool branch = (*replayPath)[replayPosition++];
+    if (isReplayPath(current) && !isInternal) {
+      bool branch = getReplayPathBranch(current);
       
       if (res==Solver::True) {
-        assert(branch && "hit invalid branch in replay path mode");
+	if (!branch) {
+	  terminateStateOnReplayFailed(current);
+	  return StatePair(0, 0);
+	}
       } else if (res==Solver::False) {
-        assert(!branch && "hit invalid branch in replay path mode");
+	if (branch) {
+	  terminateStateOnReplayFailed(current);
+	  return StatePair(0, 0);
+	}
       } else {
         // add constraints
+	// TODO(oanson) Maybe verify condition == path_c[replayPosition]?
         if(branch) {
           res = Solver::True;
           addConstraint(current, condition);
@@ -914,6 +936,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
   // the value it has been fixed at, we should take this as a nice
   // hint to just use the single constraint instead of all the binary
   // search ones. If that makes sense.
+
   if (res==Solver::True) {
     if (!isInternal) {
       if (pathWriter) {
@@ -921,9 +944,10 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
-    if (UseLATESTAlgorithm) {
-      current.path_latest.push_back(true);
-      current.path_c_latest.push_back(condition);
+    if (UseLATESTAlgorithm && !(current.isInReplay)) {
+      StackFrame &sf = current.stack.back();
+      sf.path_latest.push_back(true);
+      sf.path_c_latest.push_back(condition);
     }
     return StatePair(&current, 0);
   } else if (res==Solver::False) {
@@ -933,9 +957,10 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
-    if (UseLATESTAlgorithm) {
-      current.path_latest.push_back(false);
-      current.path_c_latest.push_back(NotExpr::create(condition));
+    if (UseLATESTAlgorithm && !current.isInReplay) {
+      StackFrame &sf = current.stack.back();
+      sf.path_latest.push_back(false);
+      sf.path_c_latest.push_back(NotExpr::create(condition));
     }
     return StatePair(0, &current);
   } else {
@@ -1003,11 +1028,13 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     addConstraint(*trueState, condition);
     addConstraint(*falseState, Expr::createIsZero(condition));
 
-    if (UseLATESTAlgorithm) {
-      trueState->path_latest.push_back(true);
-      trueState->path_c_latest.push_back(condition);
-      falseState->path_latest.push_back(false);
-      falseState->path_c_latest.push_back(NotExpr::create(condition));
+    if (UseLATESTAlgorithm) { // Won't get here on replay
+      StackFrame &true_sf = trueState->stack.back();
+      StackFrame &false_sf = falseState->stack.back();
+      true_sf.path_latest.push_back(true);
+      true_sf.path_c_latest.push_back(condition);
+      false_sf.path_latest.push_back(false);
+      false_sf.path_c_latest.push_back(NotExpr::create(condition));
     }
 
     // Kinda gross, do we even really still want this option?
@@ -1354,6 +1381,9 @@ void Executor::executeCall(ExecutionState &state,
     if (InvokeInst *ii = dyn_cast<InvokeInst>(i))
       transferToBasicBlock(ii->getNormalDest(), i->getParent(), state);
   } else {
+    if (LATESTIsExecuteFunctionAnyway(state, f)) {
+      ++state.nonLATESTExecutionDepth;
+    }
     // FIXME: I'm not really happy about this reliance on prevPC but it is ok, I
     // guess. This just done to avoid having to pass KInstIterator everywhere
     // instead of the actual instruction, since we can't make a KInstIterator
@@ -1558,16 +1588,37 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     bool isVoidReturn = (ri->getNumOperands() == 0);
     ref<Expr> result = ConstantExpr::alloc(0, Expr::Bool);
 
+    klee_message("Ret instruction. Function: %s, Stack size: %lu, isInReplay: %d", state.stack.back().kf->function->getName().str().c_str(), state.stack.size(), state.isInReplay);
+    bool wasReplayFunction = true;
     if (UseLATESTAlgorithm) {
-      --state.nonLATESTExecutionDepth;
+      if (state.nonLATESTExecutionDepth) {
+        --state.nonLATESTExecutionDepth;
+        wasReplayFunction = false;
+      } else if (state.isInReplay == ExecutionStateReplayState_NoReplay) {
+      	state.isInReplay = ExecutionStateReplayState_Replay;
+	//statePathFeasible(state, std::make_pair((Instruction*)0,""), 0, 0);
+      } else if (state.isInReplay == ExecutionStateReplayState_Replay) {
+        klee_message("About to term on replay done. "
+			"Function: %s, Stack size: %lu, isInReplay: %d",
+			state.stack.back().kf->function->getName().str().c_str(),
+			state.stack.size(), state.isInReplay);
+        terminateStateOnReplayDone(state);
+	break;
+      }
     }
     
     if (!isVoidReturn) {
       result = eval(ki, 0, state).value;
     }
+    std::stringstream ss;
+    ss << result;
+    klee_message("Ret instruction. result: %s, cell: %d",
+    		ss.str().c_str(),
+		kcaller ? ((KInstruction*)kcaller)->dest : -1);
     
     if (state.stack.size() <= 1) {
       assert(!caller && "caller set on initial stack frame");
+      klee_message("About to term on exit. Function: %s, Stack size: %lu, isInReplay: %d", state.stack.back().kf->function->getName().str().c_str(), state.stack.size(), state.isInReplay);
       terminateStateOnExit(state);
     } else {
       state.popFrame();
@@ -1606,6 +1657,28 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
             } else {
               result = ZExtExpr::create(result, to);
             }
+          }
+
+          if (UseLATESTAlgorithm && wasReplayFunction) {
+            StackFrame &sf = state.stack.back();
+            ref<Expr> symbolicResult = sf.results[sf.resultsPosition++];
+            ref<Expr> match = EqExpr::create(symbolicResult, result);
+            bool res;
+            bool success = solver->mayBeTrue(state, match, res);
+            assert(success && "FIXME: Unhandled solver failure");
+            (void) success;
+            if (!res) {
+              std::stringstream ss;
+              ss << "Infeasible path: " << match << " AND " << state.constraints;
+              klee_message("%s", ss.str().c_str());
+              terminateStateOnReplayFailed(state);
+              break;
+            } else {
+              std::stringstream ss;
+              ss << "Path may be feasible: " << match << " AND " << state.constraints;
+              klee_message("%s", ss.str().c_str());
+            }
+            addConstraint(state, match);
           }
 
           bindLocal(kcaller, state, result);
@@ -1824,13 +1897,24 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // __assert_fail, exit, _exit, etc., keep the original execution, incl.
     // nested calls
     if (UseLATESTAlgorithm) {
+      klee_message("Call instruction when using LATEST algorithm: %s", f->getName().str().c_str());
       if (LATESTIsExecuteFunctionAnyway(state, f)) {
-        ++state.nonLATESTExecutionDepth;
+        klee_message("Executing anyway: depth: %d", state.nonLATESTExecutionDepth);
+      } else if (state.isInReplay) {
+        klee_message("This function is in replay: Calling function");
+	state.isInReplay = ExecutionStateReplayState_NoReplay;
       } else {
+        klee_message("This function is not in replay: Binding a symbolic");
 	// Return symbolic value the same width as the return value type
+	ref<Expr> value;
         bool hasReturnValue = createSymbolicReturnValue(f, value);
         if (hasReturnValue) {
+	  std::stringstream ss;
+	  ss << value;
+          klee_message("Calling bindLocal with value: %s", ss.str().c_str());
           bindLocal(ki, state, value);
+	  StackFrame &sf = state.stack.back();
+	  sf.results.push_back(value);
         }
         break;
       }
@@ -2617,7 +2701,7 @@ bool Executor::LATESTIsExecuteFunctionAnyway(ExecutionState &state, Function *f)
     return true;
   }
   const char * name = f->getName().data();
-  if (strncmp(name, "klee_", sizeof("klee_")) == 0) {
+  if (strncmp(name, "klee_", sizeof("klee_")-1) == 0) {
     // Functions beginning with klee_ are always executed
     return true;
   }
@@ -2633,7 +2717,7 @@ bool Executor::LATESTIsExecuteFunctionAnyway(ExecutionState &state, Function *f)
   return false;
 }
 
-bool Executor::createSymbolicReturnValue(Function * f, ref<Expr> result) {
+bool Executor::createSymbolicReturnValue(Function * f, ref<Expr> & result) {
   static unsigned counter = 0;
   LLVM_TYPE_Q Type *returnType = f->getReturnType();
   if (returnType == Type::getVoidTy(getGlobalContext())) {
@@ -2642,10 +2726,11 @@ bool Executor::createSymbolicReturnValue(Function * f, ref<Expr> result) {
   Expr::Width width = getWidthForLLVMType(returnType);
   size_t size = Expr::getMinBytesForWidth(width);
   std::stringstream ss;
-  ss << functionName << "_summary_" << counter++;
-  std::string & name = ss.str();
+  ss << f->getName().data() << "_summary_" << counter++;
+  const std::string & name = ss.str();
   const Array *array = arrayCache.CreateArray(name, size);
   result = Expr::createTempRead(array, width);
+  assert(result.get() && "Failed to create symbolic");
   return true;
 }
 
@@ -2669,7 +2754,8 @@ void Executor::updateStates(ExecutionState *current) {
     if (it3 != seedMap.end())
       seedMap.erase(it3);
     processTree->remove(es->ptreeNode);
-    delete es;
+    //TODO(oanson) Uncomment next line
+    // delete es;
   }
   removedStates.clear();
 }
@@ -2786,6 +2872,7 @@ void Executor::doDumpStates() {
 }
 
 void Executor::run(ExecutionState &initialState) {
+  assert((!(usingSeeds && UseLATESTAlgorithm)) && "replay files and LATEST algorithm cannot be used at the same time");
   bindModuleConstants();
 
   // Delay init till now so that ticks don't accrue during
@@ -2869,6 +2956,7 @@ void Executor::run(ExecutionState &initialState) {
   searcher->update(0, newStates, std::vector<ExecutionState *>());
 
   while (!states.empty() && !haltExecution) {
+    klee_message("Cycling main loop. Number of states: %lu", states.size());
     ExecutionState &state = searcher->selectState();
     KInstruction *ki = state.pc;
     stepInstruction(state);
@@ -2959,23 +3047,37 @@ void Executor::terminateState(ExecutionState &state) {
       seedMap.erase(it3);
     addedStates.erase(it);
     processTree->remove(state.ptreeNode);
-    delete &state;
+    //TODO(oanson) Uncomment next line
+    //delete &state;
   }
 }
 
 void Executor::terminateStateEarly(ExecutionState &state, 
                                    const Twine &message) {
+  klee_message("Enter %s: message: %s", __PRETTY_FUNCTION__, message.str().c_str());
   if (!OnlyOutputStatesCoveringNew || state.coveredNew ||
-      (AlwaysOutputSeeds && seedMap.count(&state)))
-    interpreterHandler->processTestCase(state, (message + "\n").str().c_str(),
-                                        "early");
+      (AlwaysOutputSeeds && seedMap.count(&state))) {
+    const char * msg = (message + "\n").str().c_str();
+    const char * suffix = "early";
+    if (UseLATESTAlgorithm) {
+      statePathFeasible(state, std::make_pair((Instruction*)0, ""), msg, suffix);
+    } else {
+      interpreterHandler->processTestCase(state, msg, suffix);
+    }
+  }
   terminateState(state);
 }
 
 void Executor::terminateStateOnExit(ExecutionState &state) {
+  klee_message("Enter %s", __PRETTY_FUNCTION__);
   if (!OnlyOutputStatesCoveringNew || state.coveredNew || 
-      (AlwaysOutputSeeds && seedMap.count(&state)))
-    interpreterHandler->processTestCase(state, 0, 0);
+      (AlwaysOutputSeeds && seedMap.count(&state))) {
+    if (UseLATESTAlgorithm) {
+      statePathFeasible(state, std::make_pair((Instruction*)0, ""), 0, 0);
+    } else {
+      interpreterHandler->processTestCase(state, 0, 0);
+    }
+  }
   terminateState(state);
 }
 
@@ -3033,10 +3135,9 @@ bool Executor::shouldExitOn(enum TerminateReason termReason) {
   return false;
 }
 
-bool statePathFeasible(ExecutionState & state) {
-  if (!UseLATESTAlgorithm) {
-    return true;
-  }
+void Executor::statePathFeasible(ExecutionState & state,
+		const std::pair<llvm::Instruction*, std::string> & errorMsg,
+		const char * msg, const char * suffix) {
   // In theory, we have to re-run the execution. Whenever we arrive at a branch
   // we re-execute exactly the previous selection made (we can just add the
   // next constraint in path_c). When we reach a call, we symbolically execute
@@ -3060,21 +3161,21 @@ bool statePathFeasible(ExecutionState & state) {
   // A state is feasible if no functions were summarised.
   //
   // Action items:
-  // 	* Upon terminate state: Don't delete the state.
+  // V	* Upon terminate state: Don't delete the state.
   // 	  * WRONG. We clone the state instead.
-  // 	* We need seedMap information before calling terminateState
+  // V	* We need seedMap information before calling terminateState
   // 	* Replay the state. As in replayPath
   // 	  * Add replayPath to state (already done with path_latest)
   // 	  * Add code to apply replayPath
   // 	  * Add boolean to state whether we are in replay path context
   // 	    * We know to set it back in Ret. There should be no internal calls
   // 	  * Add pointer to current position in replay path
-  // 	* In callers to terminate state: Add terminating state to new state
+  // V	* In callers to terminate state: Add terminating state to new state
   //	  * With context: Type: Early, Exit, Error
   //	   		  Data: message, Error context (see terminateStateOnError)
   //	   		  Whether or not to call processTestCase if feasible
   //	  * Or context: message, suffix, and whether or not to call processTestCase.
-  //	  * update emittedErrors if infeasible
+  //	  * update emittedErrors if state is infeasible
   //	* Same behaviour as before if UseLATESTAlgorithm is false.
   /*
   if (!statePathFeasible(state)) {
@@ -3083,8 +3184,71 @@ bool statePathFeasible(ExecutionState & state) {
     		message.str() << "\n";
     interpreterHandler->processTestCase(state, ss.str().c_str(),
                                         "early.infeasible");
+  }
   */
   // If returns false, also update state.infeasibilityReason.
+  ExecutionState * clone = new ExecutionState(state);
+  // TODO We may need another clone here - one to keep original state, one for
+  //      replay state.
+  // TODO Increase fork count?
+  // set replay state
+  clone->isInReplay = ExecutionStateReplayState_Replay;
+  // set entry point
+  StackFrame &sf = clone->stack.back();
+  KFunction *kf = sf.kf;
+  clone->pc = kf->instructions;
+  clone->prevPC = clone->pc;
+  clone->incomingBBIndex = 0;
+  clone->instsSinceCovNew = 0;
+  clone->coveredNew = false;
+  clone->coveredLines.clear();
+  clone->isReplayState = true;
+  clone->replayErrorMessage = errorMsg;
+  if (msg) {
+    clone->message = msg;
+  } else {
+    clone->message.clear();
+  }
+  if (suffix) {
+    clone->suffix = suffix;
+  } else {
+    clone->suffix.clear();
+  }
+  if (!clone->pc) {
+  	klee_warning("Clone state is bust");
+  }
+  state.ptreeNode->data = 0;
+  std::pair<PTree::Node*,PTree::Node*> res = 
+        processTree->split(state.ptreeNode, clone, &state);
+  clone->ptreeNode = res.first;
+  state.ptreeNode = res.second;
+  klee_message("Testing feasibility: %s %s", msg, suffix);
+  addedStates.push_back(clone);
+}
+
+void Executor::terminateStateOnReplayDone(ExecutionState & state) {
+      klee_message("Enter %s", __PRETTY_FUNCTION__);
+      const char * message = 0;
+      if (!state.message.empty()) {
+        message = state.message.c_str();
+      }
+      const char * suffix = 0;
+      if (!state.suffix.empty()) {
+        suffix = state.suffix.c_str();
+      }
+      interpreterHandler->processTestCase(state, message, suffix);
+      terminateState(state);
+}
+
+void Executor::terminateStateOnReplayFailed(ExecutionState & state) {
+      klee_message("Enter %s", __PRETTY_FUNCTION__);
+      std::stringstream msg_ss;
+      msg_ss << "State has infeasible path\n" << state.message;
+      std::stringstream suffix_ss;
+      suffix_ss << "infeasible." << state.suffix;
+      interpreterHandler->processTestCase(state,
+      		msg_ss.str().c_str(), suffix_ss.str().c_str());
+      terminateState(state);
 }
 
 void Executor::terminateStateOnError(ExecutionState &state,
@@ -3092,12 +3256,27 @@ void Executor::terminateStateOnError(ExecutionState &state,
                                      enum TerminateReason termReason,
                                      const char *suffix,
                                      const llvm::Twine &info) {
+  klee_message("Enter %s: message: %s, suffix: %s, info: %s, replay state: %d",
+  		__PRETTY_FUNCTION__, messaget.str().c_str(), suffix, info.str().c_str(), state.isInReplay);
   std::string message = messaget.str();
   Instruction * lastInst;
   const InstructionInfo &ii = getLastNonKleeInternalInstruction(state, &lastInst);
   
+  std::pair<llvm::Instruction*, std::string> key = std::make_pair(lastInst, message);
+  if (state.isReplayState) {
+    if (key == state.replayErrorMessage) {
+      // Great. Path is feasible.
+      terminateStateOnReplayDone(state);
+      return;
+    } else {
+      std::stringstream ss;
+      ss << "Reached a different error state. Expected: " << 
+      		state.replayErrorMessage.second << " Found: " << key.second;
+      klee_message("%s", ss.str().c_str());
+    }
+  }
   if (EmitAllErrors ||
-      emittedErrors.insert(std::make_pair(lastInst, message)).second) {
+      emittedErrors.insert(key).second) {
     if (ii.file != "") {
       klee_message("ERROR: %s:%d: %s", ii.file.c_str(), ii.line, message.c_str());
     } else {
@@ -3128,12 +3307,16 @@ void Executor::terminateStateOnError(ExecutionState &state,
       suffix = suffix_buf.c_str();
     }
 
-    interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
+    if (UseLATESTAlgorithm) {
+      statePathFeasible(state, key, msg.str().c_str(), suffix);
+    } else {
+      interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
+    }
   }
     
   terminateState(state);
 
-  if (shouldExitOn(termReason))
+  if (shouldExitOn(termReason)) // TODO Might work funny with LATEST algorithm
     haltExecution = true;
 }
 
@@ -3691,7 +3874,8 @@ void Executor::runFunctionAsMain(Function *f,
     }
   }
 
-  ExecutionState *state = new ExecutionState(kmodule->functionMap[f]);
+  mainKFunction = kmodule->functionMap[f];
+  ExecutionState *state = new ExecutionState(mainKFunction);
   
   if (pathWriter) 
     state->pathOS = pathWriter->open();

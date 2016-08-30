@@ -204,14 +204,17 @@ private:
   /// File to print executed instructions to
   llvm::raw_ostream *debugInstFile;
 
-  // @brief Buffer used by logBuffer
+  /// @brief Buffer used by logBuffer
   std::string debugBufferString;
 
-  // @brief buffer to store logs before flushing to file
+  /// @brief buffer to store logs before flushing to file
   llvm::raw_string_ostream debugLogBuffer;
 
-  // @brief Set of errors that were already emitted. (i.e. reported)
-  std::set< std::pair<Instruction*, std::string> > emittedErrors;
+  /// @brief Set of errors that were already emitted. (i.e. reported)
+  std::set< std::pair<llvm::Instruction*, std::string> > emittedErrors;
+
+  /// @brief A reference to the main (KLEE) Function
+  KFunction * mainKFunction;
 
   llvm::Function* getTargetFunction(llvm::Value *calledVal,
                                     ExecutionState &state);
@@ -436,6 +439,15 @@ private:
   void printDebugInstructions(ExecutionState &state);
   void doDumpStates();
 
+  void statePathFeasible(ExecutionState & state,
+		const std::pair<llvm::Instruction*, std::string> & errorMsg,
+		const char * msg, const char * suffix);
+  bool isReplayPath(ExecutionState&);
+  bool getReplayPathBranch(ExecutionState&);
+  bool LATESTIsExecuteFunctionAnyway(ExecutionState&, llvm::Function*);
+  bool createSymbolicReturnValue(llvm::Function*, ref<Expr>&);
+  void terminateStateOnReplayDone(ExecutionState & state);
+  void terminateStateOnReplayFailed(ExecutionState & state);
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);
   virtual ~Executor();

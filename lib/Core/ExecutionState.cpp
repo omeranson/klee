@@ -44,7 +44,8 @@ namespace {
 
 StackFrame::StackFrame(KInstIterator _caller, KFunction *_kf)
   : caller(_caller), kf(_kf), callPathNode(0), 
-    minDistToUncoveredOnReturn(0), varargs(0) {
+    minDistToUncoveredOnReturn(0), varargs(0),
+    replayPosition(0), resultsPosition(0) {
   locals = new Cell[kf->numRegisters];
 }
 
@@ -54,7 +55,12 @@ StackFrame::StackFrame(const StackFrame &s)
     callPathNode(s.callPathNode),
     allocas(s.allocas),
     minDistToUncoveredOnReturn(s.minDistToUncoveredOnReturn),
-    varargs(s.varargs) {
+    varargs(s.varargs),
+    path_latest(s.path_latest),
+    path_c_latest(s.path_c_latest),
+    replayPosition(s.replayPosition),
+    results(s.results),
+    resultsPosition(s.resultsPosition) {
   locals = new Cell[s.kf->numRegisters];
   for (unsigned i=0; i<s.kf->numRegisters; i++)
     locals[i] = s.locals[i];
@@ -77,7 +83,12 @@ ExecutionState::ExecutionState(KFunction *kf) :
     instsSinceCovNew(0),
     coveredNew(false),
     forkDisabled(false),
-    ptreeNode(0) {
+    ptreeNode(0),
+    isReplayState(false),
+    replayErrorMessage(std::make_pair((llvm::Instruction*)0, "")),
+    nonLATESTExecutionDepth(0),
+    isInReplay(ExecutionStateReplayState_NoReplay)
+    {
   pushFrame(0, kf);
 }
 
@@ -120,7 +131,13 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     coveredLines(state.coveredLines),
     ptreeNode(state.ptreeNode),
     symbolics(state.symbolics),
-    arrayNames(state.arrayNames)
+    arrayNames(state.arrayNames),
+    isReplayState(state.isReplayState),
+    replayErrorMessage(state.replayErrorMessage),
+    nonLATESTExecutionDepth(state.nonLATESTExecutionDepth),
+    isInReplay(state.isInReplay),
+    message(state.message),
+    suffix(state.suffix)
 {
   for (unsigned int i=0; i<symbolics.size(); i++)
     symbolics[i].first->refCount++;
