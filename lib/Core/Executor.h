@@ -146,6 +146,14 @@ private:
   /// \invariant \ref addedStates and \ref removedStates are disjoint.
   std::vector<ExecutionState *> removedStates;
 
+  /// @brief pausedStates - States that are now paused
+  std::set<ExecutionState*> pausedStates;
+  /// @brief pausingStates - used to pause states
+  std::vector<ExecutionState *> pausingStates;
+  /// @brief resumedStates - used to resume paused states
+  std::vector<ExecutionState *> resumedStates;
+
+
   /// When non-empty the Executor is running in "seed" mode. The
   /// states in this map will be executed in an arbitrary order
   /// (outside the normal search interface) until they terminate. When
@@ -215,6 +223,10 @@ private:
 
   /// @brief A reference to the main (KLEE) Function
   KFunction * mainKFunction;
+
+  /// @brief pauseStackNo A unique identifier to this function call. Used to
+  /// identify pause stacks.
+  unsigned pauseStackNo;
 
   llvm::Function* getTargetFunction(llvm::Value *calledVal,
                                     ExecutionState &state);
@@ -439,7 +451,7 @@ private:
   void printDebugInstructions(ExecutionState &state);
   void doDumpStates();
 
-  void statePathFeasible(ExecutionState & state,
+  void statePathFeasible(ExecutionState & state, bool isFork,
 		const std::pair<llvm::Instruction*, std::string> & errorMsg,
 		const char * msg, const char * suffix);
   bool isReplayPath(ExecutionState&);
@@ -448,7 +460,18 @@ private:
   bool createSymbolicReturnValue(llvm::Function*, ref<Expr>&);
   void terminateStateOnReplayDone(ExecutionState & state);
   void terminateStateOnReplayFailed(ExecutionState & state);
-  void extendResult(ref<Expr> & result, llvm::Instruction *caller);
+  void terminateStateOnBoringReplay(ExecutionState & state);
+  ref<Expr> extendResult(ref<Expr> result, llvm::Instruction *caller);
+  bool verifyPathFeasibility(ExecutionState & state, ref<Expr> & result, bool isAddConstraint);
+
+  void pauseState(ExecutionState &state);
+  void resumeState(ExecutionState &state);
+  void pauseOtherStates(ExecutionState & state);
+  void resumeOtherStates(ExecutionState & state);
+  //void removeResumedPausedStates();
+  void terminatePausedStates();
+  void terminateStatePaused(ExecutionState &state,
+				    const llvm::Twine &message);
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);
   virtual ~Executor();

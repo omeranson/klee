@@ -87,7 +87,8 @@ ExecutionState::ExecutionState(KFunction *kf) :
     isReplayState(false),
     replayErrorMessage(std::make_pair((llvm::Instruction*)0, "")),
     nonLATESTExecutionDepth(0),
-    isInReplay(ExecutionStateReplayState_NoReplay)
+    isInReplay(ExecutionStateReplayState_NoReplay),
+    pauseOnRet(false)
     {
   pushFrame(0, kf);
 }
@@ -137,7 +138,9 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     nonLATESTExecutionDepth(state.nonLATESTExecutionDepth),
     isInReplay(state.isInReplay),
     message(state.message),
-    suffix(state.suffix)
+    suffix(state.suffix),
+    pauseStack(state.pauseStack),
+    pauseOnRet(state.pauseOnRet)
 {
   for (unsigned int i=0; i<symbolics.size(); i++)
     symbolics[i].first->refCount++;

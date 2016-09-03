@@ -194,6 +194,12 @@ public:
   /// terminated replay state goes.
   std::string suffix;
   
+  /// @brief pauseStack A stack of identifiers by which to pause states
+  /// originating from replay
+  std::vector<unsigned> pauseStack;
+
+  /// @brief pauseOnRet Pause this state upon its next return
+  bool pauseOnRet;
 private:
   ExecutionState() : ptreeNode(0) {}
 
