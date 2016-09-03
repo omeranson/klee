@@ -320,6 +320,11 @@ namespace {
 		      cl::init(false),
                       cl::desc("Use the LATEST algorithm, as appearing in the paper: 'LATEST : Lazy Dynamic Test Input Generation'"));
 
+  cl::opt<bool>
+  LATESTProcessInfeasibleCases("LATEST-process-infeasible-cases",
+		      cl::init(false),
+                      cl::desc("When using the LATEST algorithm, also process cases deemed infeasible"));
+
 }
 
 
@@ -347,6 +352,17 @@ bool isPrefix(std::vector<T> & prefix, std::vector<T> & whole) {
 		++wit;
 	}
 	return true;
+}
+
+void printPauseStack(ExecutionState & state, std::string message) {
+  std::stringstream ss;
+  ss << "Pause stack for state: " << &state << ": |";
+  for (std::vector<unsigned>::iterator it = state.pauseStack.begin(),
+   				       ie = state.pauseStack.end();
+	it != ie; it++) {
+    ss << *it << "|";
+  }
+  klee_message("%s: %s", ss.str().c_str(), message.c_str());
 }
 
 const char *Executor::TerminateReasonNames[] = {
@@ -1638,15 +1654,9 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, ref<Expr> & result,
     assert(success && "FIXME: Unhandled solver failure");
     (void) success;
     if (!res) {
-      std::stringstream ss;
-      ss << "Infeasible path: " << match << " AND " << state.constraints;
-      klee_message("%s", ss.str().c_str());
       terminateStateOnReplayFailed(state);
       return false;
     } else {
-      std::stringstream ss;
-      ss << "Path may be feasible: " << match << " AND " << state.constraints;
-      klee_message("%s", ss.str().c_str());
       if (isAddConstraint) {
           addConstraint(state, match);
       }
@@ -1656,35 +1666,21 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, ref<Expr> & result,
   return true;
 }
 
-void Executor::pauseOtherStates(ExecutionState & state) {
-  std::stringstream ss;
-  ss << "Pausing states with pause stack: |";
-  for (std::vector<unsigned>::iterator psit = state.pauseStack.begin(),
-                                       psie = state.pauseStack.end();
-      psit != psie; psit++) {
-    ss << *psit << "|";
-  }
-  klee_message("%s", ss.str().c_str());
+void Executor::setPauseOnRetByStack(ExecutionState & state, bool value) {
   for (std::set<ExecutionState*>::iterator sit=states.begin(),
                                            eit=states.end();
       sit != eit; sit++) {
     if ((&state != *sit) && (isPrefix(state.pauseStack, (*sit)->pauseStack))) {
-      //pauseState(**sit);
-      (*sit)->pauseOnRet = true;
+      (*sit)->pauseOnRet = value;
     }
   }
 }
 
+void Executor::pauseOtherStates(ExecutionState & state) {
+  setPauseOnRetByStack(state, true);
+}
+
 void Executor::resumeOtherStates(ExecutionState & state) {
-  std::stringstream ss;
-  ss << "Resuming states with pause stack: |";
-  
-  for (std::vector<unsigned>::iterator psit = state.pauseStack.begin(),
-                                       psie = state.pauseStack.end();
-      psit != psie; psit++) {
-    ss << *psit << "|";
-  }
-  klee_message("%s", ss.str().c_str());
   std::set<ExecutionState*>::iterator sit=pausedStates.begin();
   std::set<ExecutionState*>::iterator cur;
   std::set<ExecutionState*>::iterator eit=pausedStates.end();
@@ -1694,16 +1690,8 @@ void Executor::resumeOtherStates(ExecutionState & state) {
       resumeState(**cur);
     }
   }
-  /*
-  for (std::set<ExecutionState*>::iterator sit=pausedStates.begin(),
-                                           eit=pausedStates.end();
-      sit != eit; sit++) {
-    if (isPrefix(state.pauseStack, (*sit)->pauseStack)) {
-      resumeState(**sit);
-      sit = pausedStates.erase(sit);
-    }
-  }
-  */
+  // Maybe it wasn't paused yet...
+  setPauseOnRetByStack(state, false);
 }
 
 void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
@@ -1719,8 +1707,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     if (caller) {
       isVoidReturn = isVoidReturn || (caller->getType() == Type::getVoidTy(getGlobalContext()));
     }
-
-    klee_message("Ret instruction. Function: %s, Stack size: %lu, isInReplay: %d", state.stack.back().kf->function->getName().str().c_str(), state.stack.size(), state.isInReplay);
 
     if (!isVoidReturn) {
       result = eval(ki, 0, state).value;
@@ -1738,12 +1724,11 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 	// 1. Verify the path is feasible
 	if (!isVoidReturn) {
 	  if (!verifyPathFeasibility(state, result, false)) {
-	    klee_message("Path is not feasible! (1)");
 	    break;
 	  }
 	}
 	// 2. replay the function
-	statePathFeasible(state, false, std::make_pair((Instruction*)0, ""), 0, 0);
+	statePathFeasible(state, false, 0, 0);
         std::vector<klee::StackFrame>::reverse_iterator sit = state.stack.rbegin();
 	++sit;
         if (sit != state.stack.rend()) {
@@ -1755,58 +1740,30 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 	// 3. verify the path is still feasible
 	if (!isVoidReturn) {
 	  if (!verifyPathFeasibility(state, result, true)) {
-	    klee_message("Path is not feasible! (2)");
 	    break;
 	  }
 	}
 	// 4. Pause others. Resume upon replay failed.
-	pauseOtherStates(state);
 	if (state.coveredNew) {
 	  state.pauseOnRet = false;
 	}
 	if (state.pauseOnRet) {
+	  state.pauseOnRet = false;
 	  pauseState(state);
 	  break;
 	}
-	// 4. Verify new instructions were covered
-//	if (!state.coveredNew) {
-//	  klee_message("State did not cover new instructions. Terminating");
-//	  pauseState(state);
-//          // If the state is 'boring', then pause it here, and unpause it only if
-//          // another boring state of the same caller reached terminateStateOnReplayFailed.
-//	/* // 4. Pause other states. Possibly enable this later.
-//	for (std::set<ExecutionState*>::iterator it = states.begin(),
-//	                                         ie = states.end();
-//            it != ie; ++it) {
-//          KInstIterator state_kcaller = state.stack.back().caller;
-//          Instruction *state_caller = state_kcaller ? state_kcaller->inst : 0;
-//	  if (state_caller == caller) {
-//	    pauseState(
-//	  }
-//	}
-//	  //In any case, do *not* terminate 
-//	  //terminateStateOnBoringReplay(state);
-//	  */
-//	}
+	pauseOtherStates(state);
+	state.pauseOnRet = false;
 
 	// 5. continue
 	if (state.pauseStack.size() > 0) {
-          klee_message("Popping from pause stack. size: %lu, top: %u",
-                  state.pauseStack.size(), state.pauseStack.back());
           state.pauseStack.pop_back();
 	}
       }
     }
     
-    std::stringstream ss;
-    ss << result;
-    klee_message("Ret instruction. result: %s, cell: %d",
-    		ss.str().c_str(),
-		kcaller ? ((KInstruction*)kcaller)->dest : -1);
-
     if (state.stack.size() <= 1) {
       assert(!caller && "caller set on initial stack frame");
-      klee_message("About to term on exit. Function: %s, Stack size: %lu, isInReplay: %d", state.stack.back().kf->function->getName().str().c_str(), state.stack.size(), state.isInReplay);
       terminateStateOnExit(state);
     } else {
       state.popFrame();
@@ -2037,23 +1994,15 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // __assert_fail, exit, _exit, etc., keep the original execution, incl.
     // nested calls
     if (UseLATESTAlgorithm) {
-      klee_message("Call instruction when using LATEST algorithm: %s state %p",
-                   f->getName().str().c_str(), (void*)&state);
       if (LATESTIsExecuteFunctionAnyway(state, f)) {
-        klee_message("Executing anyway: depth: %d", state.nonLATESTExecutionDepth);
-      } else if (state.isInReplay) {
-        klee_message("This function is in replay: Calling function");
+      } else if ((!LATESTIsExecuteFunctionAnyway(state, f)) && (state.isInReplay)) {
 	state.isInReplay = ExecutionStateReplayState_NoReplay;
 	state.pauseStack.push_back(pauseStackNo++);
-      } else {
-        klee_message("This function is not in replay: Binding a symbolic");
+      } else if (!LATESTIsExecuteFunctionAnyway(state, f)) {
 	// Return symbolic value the same width as the return value type
 	ref<Expr> value;
         bool hasReturnValue = createSymbolicReturnValue(f, value);
         if (hasReturnValue) {
-	  std::stringstream ss;
-	  ss << value;
-          klee_message("Calling bindLocal with value: %s", ss.str().c_str());
           bindLocal(ki, state, value);
 	  StackFrame &sf = state.stack.back();
 	  sf.results.push_back(value);
@@ -2878,19 +2827,8 @@ bool Executor::createSymbolicReturnValue(Function * f, ref<Expr> & result) {
 
 void Executor::pauseState(ExecutionState &state) {
   // clone state
-  std::stringstream ss;
-  ss << "  Pausing state " << &state << " with pause stack: |";
-  for (std::vector<unsigned>::iterator psit = state.pauseStack.begin(),
-                                       psie = state.pauseStack.end();
-      psit != psie; psit++) {
-    ss << *psit << "|";
-  }
-  klee_message("%s", ss.str().c_str());
-  if (pausedStates.count(&state) != 0) {
-    klee_warning("Pausing a state a second time: %p", (void*)&state);
-  }
   ExecutionState * clone = new ExecutionState(state);
-  stats::forks += 1;
+  clone->pc = clone->prevPC;
   state.ptreeNode->data = 0;
   std::pair<PTree::Node*,PTree::Node*> res = 
         processTree->split(state.ptreeNode, clone, &state);
@@ -2899,32 +2837,13 @@ void Executor::pauseState(ExecutionState &state) {
   // Then terminate original
   terminateState(state);
   pausedStates.insert(clone);
-  //pausingStates.push_back(&state);
 }
 
 void Executor::resumeState(ExecutionState &state) {
-  std::stringstream ss;
-  ss << "  Resuming state " << &state << " with pause stack: |";
-  for (std::vector<unsigned>::iterator psit = state.pauseStack.begin(),
-                                       psie = state.pauseStack.end();
-      psit != psie; psit++) {
-    ss << *psit << "|";
-  }
-  klee_message("%s", ss.str().c_str());
   addedStates.push_back(&state);
   pausedStates.erase(&state);
-  //resumedStates.push_back(&state);
 }
 
-/*
-void Executor::removeResumedPausedStates() {
-  for (std::vector<ExecutionState*>::iterator sit=resumedStates.begin(),
-                                              eit=resumedStates.end();
-      sit != eit; sit++) {
-    pausedStates.erase(*sit);
-  }
-}
-*/
 void Executor::updateStates(ExecutionState *current) {
   
   if (searcher) {
@@ -2948,54 +2867,6 @@ void Executor::updateStates(ExecutionState *current) {
     delete es;
   }
   removedStates.clear();
-
-/*
-  if (searcher) {
-    std::vector<ExecutionState *>::iterator it;
-    std::vector<ExecutionState *>::iterator ie;
-    it = resumedStates.begin();
-    ie = resumedStates.end();
-    while (it != ie) {
-      if ((!states.count(*it)) || (!pausedStates.count(*it))) {
-        it = resumedStates.erase(it);
-        ie = resumedStates.end();
-      } else {
-        ++it;
-      }
-    }
-
-    it = pausingStates.begin();
-    while (it != pausingStates.end()) {
-      if ((!states.count(*it)) || (pausedStates.count(*it))) {
-        it = pausingStates.erase(it);
-        ie = pausingStates.end();
-      } else {
-        ++it;
-      }
-    }
-    for (it = pausingStates.begin(), ie = pausingStates.end(); it != ie; it++) {
-      klee_message("Pausing state: %p", (void*)*it);
-    }
-    for (it = resumedStates.begin(), ie = resumedStates.end(); it != ie; it++) {
-      klee_message("Resuming state: %p", (void*)*it);
-    }
-    searcher->update(0, resumedStates, pausingStates);
-  }
-  pausedStates.insert(pausingStates.begin(), pausingStates.end());
-  removeResumedPausedStates();
-  pausingStates.clear();
-  resumedStates.clear();
-  std::set<ExecutionState *> tmp;
-  std::set<ExecutionState *>::iterator oit = tmp.begin();
-  std::set_intersection(states.begin(), states.end(),
-      pausedStates.begin(), pausedStates.end(),
-      std::inserter(tmp, tmp.begin()));
-  pausedStates = tmp;
-  if (pausedStates == states) {
-    klee_error("All states are paused");
-    haltExecution = true;
-  }
-  */
 }
 
 template <typename TypeIt>
@@ -3205,12 +3076,12 @@ void Executor::run(ExecutionState &initialState) {
 
   while (!states.empty() && !haltExecution) {
     ExecutionState &state = searcher->selectState();
-    klee_message("Executing state: %p", (void*)&state);
-    //assert((pausedStates.count(&state) == 0) && "Paused state returned by searcher");
-    if (pausedStates.count(&state) != 0) {
-      klee_message("It's paused. Skipping");
-      continue;
-    }
+//    klee_message("Executing state: %p", (void*)&state);
+    assert((pausedStates.count(&state) == 0) && "Paused state returned by searcher");
+//    if (pausedStates.count(&state) != 0) {
+//      klee_message("It's paused. Skipping");
+//      continue;
+//    }
     KInstruction *ki = state.pc;
     stepInstruction(state);
 
@@ -3307,24 +3178,16 @@ void Executor::terminateState(ExecutionState &state) {
 
 void Executor::terminateStatePaused(ExecutionState &state,
 				    const Twine &message) {
-  
-  std::stringstream ss;
-  ss << "terminating paused state " << &state << " with pause stack: |";
-  for (std::vector<unsigned>::iterator psit = state.pauseStack.begin(),
-                                       psie = state.pauseStack.end();
-      psit != psie; psit++) {
-    ss << *psit << "|";
+  if (LATESTProcessInfeasibleCases) {
+    const char * msg = (message + "\n").str().c_str();
+    const char * suffix = "paused.early";
+    interpreterHandler->processTestCase(state, msg, suffix);
   }
-  klee_message("%s", ss.str().c_str());
-  const char * msg = (message + "\n").str().c_str();
-  const char * suffix = "paused.early";
-  interpreterHandler->processTestCase(state, msg, suffix);
-  // delete &state;
+  delete &state;
 }
 
 void Executor::terminateStateEarly(ExecutionState &state, 
                                    const Twine &message) {
-  klee_message("Enter %s: message: %s", __PRETTY_FUNCTION__, message.str().c_str());
   if (!OnlyOutputStatesCoveringNew || state.coveredNew ||
       (AlwaysOutputSeeds && seedMap.count(&state))) {
     const char * msg = (message + "\n").str().c_str();
@@ -3335,7 +3198,6 @@ void Executor::terminateStateEarly(ExecutionState &state,
 }
 
 void Executor::terminateStateOnExit(ExecutionState &state) {
-  klee_message("Enter %s", __PRETTY_FUNCTION__);
   if (!OnlyOutputStatesCoveringNew || state.coveredNew || 
       (AlwaysOutputSeeds && seedMap.count(&state))) {
     interpreterHandler->processTestCase(state, 0, 0);
@@ -3398,7 +3260,6 @@ bool Executor::shouldExitOn(enum TerminateReason termReason) {
 }
 
 void Executor::statePathFeasible(ExecutionState & state, bool isFork,
-		const std::pair<llvm::Instruction*, std::string> & errorMsg,
 		const char * msg, const char * suffix) {
   // In theory, we have to re-run the execution. Whenever we arrive at a branch
   // we re-execute exactly the previous selection made (we can just add the
@@ -3449,9 +3310,9 @@ void Executor::statePathFeasible(ExecutionState & state, bool isFork,
   }
   */
   // If returns false, also update state.infeasibilityReason.
+
   ExecutionState * clone = &state;
   if (isFork) {
-    // TODO Increase fork count?
     clone = state.branch();
     stats::forks += 1;
     addedStates.push_back(clone);
@@ -3471,25 +3332,15 @@ void Executor::statePathFeasible(ExecutionState & state, bool isFork,
   clone->incomingBBIndex = 0;
   clone->instsSinceCovNew = 0;
   clone->isReplayState = true;
-  clone->replayErrorMessage = errorMsg;
   if (msg) {
     clone->message = msg;
-  } else {
-    clone->message.clear();
   }
   if (suffix) {
     clone->suffix = suffix;
-  } else {
-    clone->suffix.clear();
   }
-  if (!clone->pc) {
-  	klee_warning("Clone state is bust");
-  }
-  klee_message("Testing feasibility: %s %s", msg, suffix);
 }
 
 void Executor::terminateStateOnReplayDone(ExecutionState & state) {
-      klee_message("Enter %s", __PRETTY_FUNCTION__);
       const char * message = 0;
       if (!state.message.empty()) {
         message = state.message.c_str();
@@ -3503,19 +3354,19 @@ void Executor::terminateStateOnReplayDone(ExecutionState & state) {
 }
 
 void Executor::terminateStateOnReplayFailed(ExecutionState & state) {
-      klee_message("Enter %s", __PRETTY_FUNCTION__);
       resumeOtherStates(state);
-      std::stringstream msg_ss;
-      msg_ss << "State has infeasible path\n" << state.message;
-      std::stringstream suffix_ss;
-      suffix_ss << "infeasible." << state.suffix;
-      interpreterHandler->processTestCase(state,
-      		msg_ss.str().c_str(), suffix_ss.str().c_str());
+      if (LATESTProcessInfeasibleCases) {
+        std::stringstream msg_ss;
+        msg_ss << "State has infeasible path\n" << state.message;
+        std::stringstream suffix_ss;
+        suffix_ss << "infeasible." << state.suffix;
+        interpreterHandler->processTestCase(state,
+        		msg_ss.str().c_str(), suffix_ss.str().c_str());
+      }
       terminateState(state);
 }
 
 void Executor::terminateStateOnBoringReplay(ExecutionState & state) {
-      klee_message("Enter %s", __PRETTY_FUNCTION__);
       std::stringstream msg_ss;
       msg_ss << "Replay state did not cover new instructions.\n" << state.message;
       std::stringstream suffix_ss;
@@ -3533,28 +3384,24 @@ void Executor::terminateStateOnError(ExecutionState &state,
                                      enum TerminateReason termReason,
                                      const char *suffix,
                                      const llvm::Twine &info) {
-  klee_message("Enter %s: message: %s, suffix: %s, info: %s, state: %p, replay state: %d",
-  		__PRETTY_FUNCTION__, messaget.str().c_str(), suffix, info.str().c_str(),
-		(void*)&state, state.isInReplay);
   std::string message = messaget.str();
   Instruction * lastInst;
   const InstructionInfo &ii = getLastNonKleeInternalInstruction(state, &lastInst);
   
   std::pair<llvm::Instruction*, std::string> key = std::make_pair(lastInst, message);
-  if (state.isInReplay == ExecutionStateReplayState_Replay) {
+  //if (state.isInReplay == ExecutionStateReplayState_Replay) {
     if (key == state.replayErrorMessage) {
       // Great. Path is feasible.
       std::stringstream ss;
-      klee_message("The path to the error is feasible: %s", message.c_str());
       terminateStateOnReplayDone(state);
       return;
-    } else {
-      std::stringstream ss;
-      ss << "Reached a different error state. Expected: " << 
-      		state.replayErrorMessage.second << " Found: " << key.second;
-      klee_message("%s", ss.str().c_str());
+  //  } else {
+  //    std::stringstream ss;
+  //    ss << "Reached a different error state. Expected: " << 
+  //    		state.replayErrorMessage.second << " Found: " << key.second;
+  //    klee_message("%s", ss.str().c_str());
     }
-  }
+  //}
   if (EmitAllErrors ||
       emittedErrors.insert(key).second) {
     if (ii.file != "") {
@@ -3588,7 +3435,12 @@ void Executor::terminateStateOnError(ExecutionState &state,
     }
 
     if (UseLATESTAlgorithm) {
-      statePathFeasible(state, true, key, msg.str().c_str(), suffix);
+      state.replayErrorMessage = key;
+      state.pauseOnRet = false;
+      //state.pauseStack.clear();
+      //state.pauseStack.push_back(pauseStackNo++);
+      //printPauseStack(state, "For state termed on error.");
+      statePathFeasible(state, true, msg.str().c_str(), suffix);
     } else {
       interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
     }

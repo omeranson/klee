@@ -452,7 +452,6 @@ private:
   void doDumpStates();
 
   void statePathFeasible(ExecutionState & state, bool isFork,
-		const std::pair<llvm::Instruction*, std::string> & errorMsg,
 		const char * msg, const char * suffix);
   bool isReplayPath(ExecutionState&);
   bool getReplayPathBranch(ExecutionState&);
@@ -466,6 +465,7 @@ private:
 
   void pauseState(ExecutionState &state);
   void resumeState(ExecutionState &state);
+  void setPauseOnRetByStack(ExecutionState & state, bool value);
   void pauseOtherStates(ExecutionState & state);
   void resumeOtherStates(ExecutionState & state);
   //void removeResumedPausedStates();

@@ -456,8 +456,6 @@ void KleeHandler::processTestCase(const ExecutionState &state,
 
       if (!kTest_toFile(&b, getOutputFilename(getTestFilename("ktest", id)).c_str())) {
         klee_warning("unable to write output test case, losing it");
-      } else {
-        klee_message("Wrote output test case to %s", getTestFilename("ktest", id).c_str());
       }
 
       for (unsigned i=0; i<b.numObjects; i++)
