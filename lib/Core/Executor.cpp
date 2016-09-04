@@ -813,10 +813,8 @@ void Executor::branch(ExecutionState &state,
       StackFrame &sf = result[i]->stack.back();
       for (unsigned j = 0; j < i; j++) {
         sf.path_latest.push_back(false);
-        sf.path_c_latest.push_back(NotExpr::create(conditions[j]));
       }
       sf.path_latest.push_back(true);
-      sf.path_c_latest.push_back(conditions[i]);
     }
   }
 }
@@ -898,7 +896,6 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
 	}
       } else {
         // add constraints
-	// TODO(oanson) Maybe verify condition == path_c[replayPosition]?
         if(branch) {
           res = Solver::True;
           addConstraint(current, condition);
@@ -985,7 +982,6 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     if (UseLATESTAlgorithm && !(current.isInReplay)) {
       StackFrame &sf = current.stack.back();
       sf.path_latest.push_back(true);
-      sf.path_c_latest.push_back(condition);
     }
     return StatePair(&current, 0);
   } else if (res==Solver::False) {
@@ -998,7 +994,6 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     if (UseLATESTAlgorithm && !current.isInReplay) {
       StackFrame &sf = current.stack.back();
       sf.path_latest.push_back(false);
-      sf.path_c_latest.push_back(NotExpr::create(condition));
     }
     return StatePair(0, &current);
   } else {
@@ -1070,9 +1065,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       StackFrame &true_sf = trueState->stack.back();
       StackFrame &false_sf = falseState->stack.back();
       true_sf.path_latest.push_back(true);
-      true_sf.path_c_latest.push_back(condition);
       false_sf.path_latest.push_back(false);
-      false_sf.path_c_latest.push_back(NotExpr::create(condition));
     }
 
     // Kinda gross, do we even really still want this option?
@@ -3331,7 +3324,6 @@ void Executor::statePathFeasible(ExecutionState & state, bool isFork,
   clone->prevPC = clone->pc;
   clone->incomingBBIndex = 0;
   clone->instsSinceCovNew = 0;
-  clone->isReplayState = true;
   if (msg) {
     clone->message = msg;
   }
@@ -3389,19 +3381,12 @@ void Executor::terminateStateOnError(ExecutionState &state,
   const InstructionInfo &ii = getLastNonKleeInternalInstruction(state, &lastInst);
   
   std::pair<llvm::Instruction*, std::string> key = std::make_pair(lastInst, message);
-  //if (state.isInReplay == ExecutionStateReplayState_Replay) {
-    if (key == state.replayErrorMessage) {
-      // Great. Path is feasible.
-      std::stringstream ss;
-      terminateStateOnReplayDone(state);
-      return;
-  //  } else {
-  //    std::stringstream ss;
-  //    ss << "Reached a different error state. Expected: " << 
-  //    		state.replayErrorMessage.second << " Found: " << key.second;
-  //    klee_message("%s", ss.str().c_str());
-    }
-  //}
+  if (key == state.replayErrorMessage) {
+    // Great. Path is feasible.
+    std::stringstream ss;
+    terminateStateOnReplayDone(state);
+    return;
+  }
   if (EmitAllErrors ||
       emittedErrors.insert(key).second) {
     if (ii.file != "") {

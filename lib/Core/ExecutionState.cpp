@@ -57,7 +57,6 @@ StackFrame::StackFrame(const StackFrame &s)
     minDistToUncoveredOnReturn(s.minDistToUncoveredOnReturn),
     varargs(s.varargs),
     path_latest(s.path_latest),
-    path_c_latest(s.path_c_latest),
     replayPosition(s.replayPosition),
     results(s.results),
     resultsPosition(s.resultsPosition) {
@@ -84,7 +83,6 @@ ExecutionState::ExecutionState(KFunction *kf) :
     coveredNew(false),
     forkDisabled(false),
     ptreeNode(0),
-    isReplayState(false),
     replayErrorMessage(std::make_pair((llvm::Instruction*)0, "")),
     nonLATESTExecutionDepth(0),
     isInReplay(ExecutionStateReplayState_NoReplay),
@@ -133,7 +131,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     ptreeNode(state.ptreeNode),
     symbolics(state.symbolics),
     arrayNames(state.arrayNames),
-    isReplayState(state.isReplayState),
     replayErrorMessage(state.replayErrorMessage),
     nonLATESTExecutionDepth(state.nonLATESTExecutionDepth),
     isInReplay(state.isInReplay),

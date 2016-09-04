@@ -148,11 +148,6 @@ private:
 
   /// @brief pausedStates - States that are now paused
   std::set<ExecutionState*> pausedStates;
-  /// @brief pausingStates - used to pause states
-  std::vector<ExecutionState *> pausingStates;
-  /// @brief resumedStates - used to resume paused states
-  std::vector<ExecutionState *> resumedStates;
-
 
   /// When non-empty the Executor is running in "seed" mode. The
   /// states in this map will be executed in an arbitrary order

@@ -69,14 +69,10 @@ struct StackFrame {
   /// condition
   std::vector<bool> path_latest;
 
-  /// @brief path_c A vector of conditions. During a branch, this condition
-  /// must be true for the branch to be selected.
-  std::vector<ref<Expr> > path_c_latest;
-
   /// @brief The current location on the path.
   unsigned replayPosition;
 
-  /// @brief results A vecotro of the return values of functions called from
+  /// @brief results A vector of the return values of functions called from
   /// this function
   std::vector<ref<Expr> > results;
 
@@ -172,9 +168,6 @@ public:
   std::string getFnAlias(std::string fn);
   void addFnAlias(std::string old_fn, std::string new_fn);
   void removeFnAlias(std::string fn);
-
-  /// @brief isReplayState This state is part of a replay
-  bool isReplayState;
 
   /// @brief replayMessage In case of errors, the instruction+message will be
   /// used to identify that the same error has been reached.
