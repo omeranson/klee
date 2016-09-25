@@ -1987,11 +1987,11 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // __assert_fail, exit, _exit, etc., keep the original execution, incl.
     // nested calls
     if (UseLATESTAlgorithm) {
-      if (LATESTIsExecuteFunctionAnyway(state, f)) {
-      } else if ((!LATESTIsExecuteFunctionAnyway(state, f)) && (state.isInReplay)) {
+      bool execAnyway = LATESTIsExecuteFunctionAnyway(state, f);
+      if ((!execAnyway) && (state.isInReplay)) {
 	state.isInReplay = ExecutionStateReplayState_NoReplay;
 	state.pauseStack.push_back(pauseStackNo++);
-      } else if (!LATESTIsExecuteFunctionAnyway(state, f)) {
+      } else if (!execAnyway) {
 	// Return symbolic value the same width as the return value type
 	ref<Expr> value;
         bool hasReturnValue = createSymbolicReturnValue(f, value);
