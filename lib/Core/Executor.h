@@ -227,6 +227,7 @@ private:
 
   /// @brief Map an LLVM function pointer to its summaryt.
   std::map<llvm::Function *, MemoryAccessPass::MemoryAccess *> summaries;
+  const MemoryAccessPass::MemoryAccess * getSummary(llvm::Function * f);
 
   llvm::Function* getTargetFunction(llvm::Value *calledVal,
                                     ExecutionState &state);

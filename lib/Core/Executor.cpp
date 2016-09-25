@@ -2002,22 +2002,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 	  // Otherwise, set up the changes to the state, and continue without
 	  // actually executing the function (i.e. break;).
 	  // For now, we log:
-	  const MemoryAccessPass::MemoryAccess * mapc;
-	  std::map<llvm::Function *, MemoryAccessPass::MemoryAccess*>::iterator map_it =
-	  		summaries.find(f);
-	  if (map_it == summaries.end()) {
-	  	MemoryAccessPass::MemoryAccess * map = new MemoryAccessPass::MemoryAccess();
-	        klee_message("Analysing: %s", f->getName().data());
-		map->runOnFunction(*f);
-		std::string s;
-		llvm::raw_string_ostream rso(s);
-		map->print(rso, f->getParent());
-		klee_message("Analysis: %s", s.c_str());
-		summaries[f] = map;
-		mapc = map;
-	  } else {
-	  	mapc = map_it->second;
-	  }
+	  const MemoryAccessPass::MemoryAccess * mapc = getSummary(f);
 	  klee_message("Analysed: %s summarise: %s", f->getName().data(),
 	          mapc->isSummariseFunction() ? "True" : "False");
           // Return symbolic value the same width as the return value type
@@ -2807,6 +2792,23 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     terminateStateOnExecError(state, "illegal instruction");
     break;
   }
+}
+
+const MemoryAccessPass::MemoryAccess * Executor::getSummary(Function * f) {
+  std::map<llvm::Function *, MemoryAccessPass::MemoryAccess*>::iterator
+          map_it = summaries.find(f);
+  if (map_it != summaries.end()) {
+    return map_it->second;
+  }
+  MemoryAccessPass::MemoryAccess * map = new MemoryAccessPass::MemoryAccess();
+  klee_message("Analysing: %s", f->getName().data());
+  map->runOnFunction(*f);
+  std::string s;
+  llvm::raw_string_ostream rso(s);
+  map->print(rso, f->getParent());
+  klee_message("Analysis: %s", s.c_str());
+  summaries[f] = map;
+  return map;
 }
 
 bool Executor::LATESTIsExecuteFunctionAnyway(ExecutionState &state, Function *f) {
