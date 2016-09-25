@@ -404,3 +404,16 @@ ExecutionStateReplayState & ExecutionState::isInReplay() {
   StackFrame &sf = stack.back();
   return sf.isInReplay;
 }
+
+ExecutionStateReplayState & ExecutionState::isInReplaySkippingSkipped() {
+  // @pre topmost level is either Replay or NoReplay
+  for (stack_ty::reverse_iterator it = stack.rbegin(),
+                          ie = stack.rend();
+          it != ie; it++) {
+    if (ExecutionStateReplayState_SkipLATEST == it->isInReplay) {
+      continue;
+    }
+    return it->isInReplay;
+  }
+  assert(false && "No non-skipped stack frames.");
+}

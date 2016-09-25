@@ -826,7 +826,8 @@ void Executor::branch(ExecutionState &state,
 }
 
 bool Executor::isReplayPath(ExecutionState &state) {
-  return ((replayPath != 0) || (state.isInReplay() == ExecutionStateReplayState_Replay));
+  return ((replayPath != 0) ||
+  		(state.isInReplaySkippingSkipped() == ExecutionStateReplayState_Replay));
 }
 
 bool Executor::getReplayPathBranch(ExecutionState & state) {
@@ -985,7 +986,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
-    if (UseLATESTAlgorithm && !(current.isInReplay())) {
+    if (UseLATESTAlgorithm) {
       StackFrame &sf = current.stack.back();
       sf.path_latest.push_back(true);
     }
@@ -997,7 +998,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
-    if (UseLATESTAlgorithm && !current.isInReplay()) {
+    if (UseLATESTAlgorithm) {
       StackFrame &sf = current.stack.back();
       sf.path_latest.push_back(false);
     }
@@ -1714,7 +1715,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
     if (UseLATESTAlgorithm) {
       if (state.isInReplay() == ExecutionStateReplayState_NoReplay) {
-        state.isInReplay() = ExecutionStateReplayState_Replay;
 	// 1. Verify the path is feasible
 	if (!isVoidReturn) {
 	  if (!verifyPathFeasibility(state, result, false)) {

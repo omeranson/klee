@@ -220,6 +220,7 @@ public:
   void dumpStack(llvm::raw_ostream &out) const;
 
   ExecutionStateReplayState & isInReplay();
+  ExecutionStateReplayState & isInReplaySkippingSkipped();
 };
 }
 
