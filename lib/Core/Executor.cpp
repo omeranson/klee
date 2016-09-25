@@ -2002,17 +2002,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 	  // Otherwise, set up the changes to the state, and continue without
 	  // actually executing the function (i.e. break;).
 	  // For now, we log:
-	  const MemoryAccessPass::MemoryAccess * mapc = getSummary(f);
+	  const MemoryAccessPass::MemoryAccess * map = getSummary(f);
+	  bool isSummariseFunction = map->isSummariseFunction();
 	  klee_message("Analysed: %s summarise: %s", f->getName().data(),
-	          mapc->isSummariseFunction() ? "True" : "False");
+	          isSummariseFunction ? "True" : "False");
           // Return symbolic value the same width as the return value type
-          ref<Expr> value;
-          bool hasReturnValue = createSymbolicReturnValue(f, value);
-          if (hasReturnValue) {
-            bindLocal(ki, state, value);
-            StackFrame &sf = state.stack.back();
-            sf.results.push_back(value);
-          }
+	  summariseFunctionCall(state, ki, f);
           break;
         }
       }
@@ -2809,6 +2804,16 @@ const MemoryAccessPass::MemoryAccess * Executor::getSummary(Function * f) {
   klee_message("Analysis: %s", s.c_str());
   summaries[f] = map;
   return map;
+}
+
+void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, Function * f) {
+  ref<Expr> value;
+  bool hasReturnValue = createSymbolicReturnValue(f, value);
+  if (hasReturnValue) {
+    bindLocal(ki, state, value);
+    StackFrame &sf = state.stack.back();
+    sf.results.push_back(value);
+  }
 }
 
 bool Executor::LATESTIsExecuteFunctionAnyway(ExecutionState &state, Function *f) {
