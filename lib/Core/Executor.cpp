@@ -726,7 +726,7 @@ void Executor::branch(ExecutionState &state,
   unsigned N = conditions.size();
   assert(N);
 
-  assert((!state.isInReplay) && "State replay not supported for branch");
+  assert((!state.isInReplay()) && "State replay not supported for branch");
   if (MaxForks!=~0u && stats::forks >= MaxForks) {
     unsigned next = theRNG.getInt32() % N;
     for (unsigned i=0; i<N; ++i) {
@@ -820,7 +820,7 @@ void Executor::branch(ExecutionState &state,
 }
 
 bool Executor::isReplayPath(ExecutionState &state) {
-  return ((replayPath != 0) || (state.isInReplay == ExecutionStateReplayState_Replay));
+  return ((replayPath != 0) || (state.isInReplay() == ExecutionStateReplayState_Replay));
 }
 
 bool Executor::getReplayPathBranch(ExecutionState & state) {
@@ -979,7 +979,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
-    if (UseLATESTAlgorithm && !(current.isInReplay)) {
+    if (UseLATESTAlgorithm && !(current.isInReplay())) {
       StackFrame &sf = current.stack.back();
       sf.path_latest.push_back(true);
     }
@@ -991,7 +991,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
-    if (UseLATESTAlgorithm && !current.isInReplay) {
+    if (UseLATESTAlgorithm && !current.isInReplay()) {
       StackFrame &sf = current.stack.back();
       sf.path_latest.push_back(false);
     }
@@ -1412,15 +1412,17 @@ void Executor::executeCall(ExecutionState &state,
     if (InvokeInst *ii = dyn_cast<InvokeInst>(i))
       transferToBasicBlock(ii->getNormalDest(), i->getParent(), state);
   } else {
-    if (LATESTIsExecuteFunctionAnyway(state, f)) {
-      ++state.nonLATESTExecutionDepth;
-    }
     // FIXME: I'm not really happy about this reliance on prevPC but it is ok, I
     // guess. This just done to avoid having to pass KInstIterator everywhere
     // instead of the actual instruction, since we can't make a KInstIterator
     // from just an instruction (unlike LLVM).
     KFunction *kf = kmodule->functionMap[f];
     state.pushFrame(state.prevPC, kf);
+    if (LATESTIsExecuteFunctionAnyway(state, f)) {
+      ++state.nonLATESTExecutionDepth;
+    } else {
+      state.isInReplay() = ExecutionStateReplayState_NoReplay;
+    }
     state.pc = kf->instructions;
 
     if (statsTracker)
@@ -1712,8 +1714,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     if (UseLATESTAlgorithm) {
       if (state.nonLATESTExecutionDepth) {
         --state.nonLATESTExecutionDepth;
-      } else if (state.isInReplay == ExecutionStateReplayState_NoReplay) {
-      	state.isInReplay = ExecutionStateReplayState_Replay;
+      } else if (state.isInReplay() == ExecutionStateReplayState_NoReplay) {
+        state.isInReplay() = ExecutionStateReplayState_Replay;
 	// 1. Verify the path is feasible
 	if (!isVoidReturn) {
 	  if (!verifyPathFeasibility(state, result, false)) {
@@ -1729,7 +1731,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 	  sf.resultsPosition = 0;
         }
 	break; // We'll come here again when isInReplay is 'Replay'
-      } else if (state.isInReplay == ExecutionStateReplayState_Replay) {
+      } else if (state.isInReplay() == ExecutionStateReplayState_Replay) {
 	// 3. verify the path is still feasible
 	if (!isVoidReturn) {
 	  if (!verifyPathFeasibility(state, result, true)) {
@@ -1988,8 +1990,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // nested calls
     if (UseLATESTAlgorithm) {
       bool execAnyway = LATESTIsExecuteFunctionAnyway(state, f);
-      if ((!execAnyway) && (state.isInReplay)) {
-	state.isInReplay = ExecutionStateReplayState_NoReplay;
+      if ((!execAnyway) && (state.isInReplay())) {
 	state.pauseStack.push_back(pauseStackNo++);
       } else if (!execAnyway) {
 	// Return symbolic value the same width as the return value type
@@ -3316,7 +3317,7 @@ void Executor::statePathFeasible(ExecutionState & state, bool isFork,
     state.ptreeNode = res.second;
   }
   // set replay state
-  clone->isInReplay = ExecutionStateReplayState_Replay;
+  clone->isInReplay() = ExecutionStateReplayState_Replay;
   // set entry point
   StackFrame &sf = clone->stack.back();
   KFunction *kf = sf.kf;

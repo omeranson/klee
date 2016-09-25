@@ -45,6 +45,7 @@ namespace {
 StackFrame::StackFrame(KInstIterator _caller, KFunction *_kf)
   : caller(_caller), kf(_kf), callPathNode(0), 
     minDistToUncoveredOnReturn(0), varargs(0),
+    isInReplay(ExecutionStateReplayState_NoReplay),
     replayPosition(0), resultsPosition(0) {
   locals = new Cell[kf->numRegisters];
 }
@@ -56,6 +57,7 @@ StackFrame::StackFrame(const StackFrame &s)
     allocas(s.allocas),
     minDistToUncoveredOnReturn(s.minDistToUncoveredOnReturn),
     varargs(s.varargs),
+    isInReplay(s.isInReplay),
     path_latest(s.path_latest),
     replayPosition(s.replayPosition),
     results(s.results),
@@ -85,7 +87,6 @@ ExecutionState::ExecutionState(KFunction *kf) :
     ptreeNode(0),
     replayErrorMessage(std::make_pair((llvm::Instruction*)0, "")),
     nonLATESTExecutionDepth(0),
-    isInReplay(ExecutionStateReplayState_NoReplay),
     pauseOnRet(false)
     {
   pushFrame(0, kf);
@@ -133,7 +134,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     arrayNames(state.arrayNames),
     replayErrorMessage(state.replayErrorMessage),
     nonLATESTExecutionDepth(state.nonLATESTExecutionDepth),
-    isInReplay(state.isInReplay),
     message(state.message),
     suffix(state.suffix),
     pauseStack(state.pauseStack),
@@ -397,4 +397,9 @@ void ExecutionState::dumpStack(llvm::raw_ostream &out) const {
     out << "\n";
     target = sf.caller;
   }
+}
+
+ExecutionStateReplayState & ExecutionState::isInReplay() {
+  StackFrame &sf = stack.back();
+  return sf.isInReplay;
 }

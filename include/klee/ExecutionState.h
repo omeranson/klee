@@ -65,6 +65,9 @@ struct StackFrame {
   // of intrinsic lowering.
   MemoryObject *varargs;
 
+  /// @brief The state is during replay as per LATEST algorithm
+  ExecutionStateReplayState isInReplay;
+
   /// @brief path A vector of booleans stating which path was selected at each
   /// condition
   std::vector<bool> path_latest;
@@ -177,9 +180,6 @@ public:
   /// we know to call nested functions as well.
   unsigned nonLATESTExecutionDepth;
 
-  /// @brief The state is during replay as per LATEST algorithm
-  ExecutionStateReplayState isInReplay;
-
   /// @brief msg The error message with which to terminate this replay state.
   std::string message;
 
@@ -217,6 +217,8 @@ public:
 
   bool merge(const ExecutionState &b);
   void dumpStack(llvm::raw_ostream &out) const;
+
+  ExecutionStateReplayState & isInReplay();
 };
 }
 
