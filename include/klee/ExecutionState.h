@@ -38,7 +38,8 @@ struct InstructionInfo;
 typedef enum {
 	ExecutionStateReplayState_NoReplay = 0, // "Normal" LATEST algorithm
 	ExecutionStateReplayState_Replay,	// replay in LATEST algorithm
-	ExecutionStateReplayState_RecursiveNoLATEST	// Do not apply the LATEST algorithm on this function, or any nested functions.
+	ExecutionStateReplayState_RecursiveNoLATEST,	// Do not apply the LATEST algorithm on this function, or any nested functions.
+	ExecutionStateReplayState_SkipLATEST	// This method is too complex to summarise. Symbolically execute directly.
 } ExecutionStateReplayState;
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const MemoryMap &mm);
@@ -183,6 +184,10 @@ public:
   /// terminated replay state goes.
   std::string suffix;
   
+  /// @brief nextIsInReplay When pushing a new stack frame, this should be its
+  /// isInReplay value
+  ExecutionStateReplayState nextIsInReplay;
+
   /// @brief pauseStack A stack of identifiers by which to pause states
   /// originating from replay
   std::vector<unsigned> pauseStack;

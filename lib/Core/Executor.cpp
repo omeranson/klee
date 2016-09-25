@@ -1422,11 +1422,8 @@ void Executor::executeCall(ExecutionState &state,
     // guess. This just done to avoid having to pass KInstIterator everywhere
     // instead of the actual instruction, since we can't make a KInstIterator
     // from just an instruction (unlike LLVM).
-    bool execAnyway = LATESTIsExecuteFunctionAnyway(state, f);
     KFunction *kf = kmodule->functionMap[f];
     state.pushFrame(state.prevPC, kf);
-    state.isInReplay() = execAnyway ?
-        ExecutionStateReplayState_RecursiveNoLATEST : ExecutionStateReplayState_NoReplay;
     state.pc = kf->instructions;
 
     if (statsTracker)
@@ -1990,11 +1987,12 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // Replace with call to klee_int. However, if already begins with klee, is
     // __assert_fail, exit, _exit, etc., keep the original execution, incl.
     // nested calls
-    if (UseLATESTAlgorithm && !LATESTIsExecuteFunctionAnyway(state, f)) {
+    if (UseLATESTAlgorithm) {
       bool execAnyway = LATESTIsExecuteFunctionAnyway(state, f);
       if (!execAnyway) {
         if (ExecutionStateReplayState_Replay == state.isInReplay()) {
           state.pauseStack.push_back(pauseStackNo++);
+          state.nextIsInReplay = ExecutionStateReplayState_NoReplay;
         } else {
 	  // Here we classify. If classification says function is too complex,
 	  // we symbolically execute (have executeCall set isInReplay to
@@ -2010,6 +2008,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 	  summariseFunctionCall(state, ki, f);
           break;
         }
+      } else {
+        state.nextIsInReplay = ExecutionStateReplayState_RecursiveNoLATEST;
       }
     }
 

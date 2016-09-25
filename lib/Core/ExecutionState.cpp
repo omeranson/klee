@@ -86,6 +86,7 @@ ExecutionState::ExecutionState(KFunction *kf) :
     forkDisabled(false),
     ptreeNode(0),
     replayErrorMessage(std::make_pair((llvm::Instruction*)0, "")),
+    nextIsInReplay(ExecutionStateReplayState_NoReplay),
     pauseOnRet(false)
     {
   pushFrame(0, kf);
@@ -134,6 +135,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     replayErrorMessage(state.replayErrorMessage),
     message(state.message),
     suffix(state.suffix),
+    nextIsInReplay(state.nextIsInReplay),
     pauseStack(state.pauseStack),
     pauseOnRet(state.pauseOnRet)
 {
@@ -156,6 +158,7 @@ ExecutionState *ExecutionState::branch() {
 
 void ExecutionState::pushFrame(KInstIterator caller, KFunction *kf) {
   stack.push_back(StackFrame(caller,kf));
+  isInReplay() = nextIsInReplay;
 }
 
 void ExecutionState::popFrame() {
