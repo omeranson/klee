@@ -48,6 +48,7 @@
 #include "klee/Internal/System/MemoryUsage.h"
 #include "klee/SolverStats.h"
 
+
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Attributes.h"
@@ -471,6 +472,11 @@ const Module *Executor::setModule(llvm::Module *module,
 }
 
 Executor::~Executor() {
+  for (std::map<llvm::Function *, MemoryAccessPass::MemoryAccess*>::iterator
+			 it = summaries.begin(), ie = summaries.end();
+  		it != ie; it++) {
+	delete it->second;
+  }
   delete memory;
   delete externalDispatcher;
   if (processTree)
@@ -1416,9 +1422,10 @@ void Executor::executeCall(ExecutionState &state,
     // guess. This just done to avoid having to pass KInstIterator everywhere
     // instead of the actual instruction, since we can't make a KInstIterator
     // from just an instruction (unlike LLVM).
+    bool execAnyway = LATESTIsExecuteFunctionAnyway(state, f);
     KFunction *kf = kmodule->functionMap[f];
     state.pushFrame(state.prevPC, kf);
-    state.isInReplay() = (LATESTIsExecuteFunctionAnyway(state, f)) ?
+    state.isInReplay() = execAnyway ?
         ExecutionStateReplayState_RecursiveNoLATEST : ExecutionStateReplayState_NoReplay;
     state.pc = kf->instructions;
 
@@ -1983,20 +1990,46 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     // Replace with call to klee_int. However, if already begins with klee, is
     // __assert_fail, exit, _exit, etc., keep the original execution, incl.
     // nested calls
-    if (UseLATESTAlgorithm) {
+    if (UseLATESTAlgorithm && !LATESTIsExecuteFunctionAnyway(state, f)) {
       bool execAnyway = LATESTIsExecuteFunctionAnyway(state, f);
-      if ((!execAnyway) && (state.isInReplay())) {
-	state.pauseStack.push_back(pauseStackNo++);
-      } else if (!execAnyway) {
-	// Return symbolic value the same width as the return value type
-	ref<Expr> value;
-        bool hasReturnValue = createSymbolicReturnValue(f, value);
-        if (hasReturnValue) {
-          bindLocal(ki, state, value);
-	  StackFrame &sf = state.stack.back();
-	  sf.results.push_back(value);
+      if (!execAnyway) {
+        if (ExecutionStateReplayState_Replay == state.isInReplay()) {
+          state.pauseStack.push_back(pauseStackNo++);
+        } else {
+	  // Here we classify. If classification says function is too complex,
+	  // we symbolically execute (have executeCall set isInReplay to
+	  // SkipLATEST, and continue.
+	  // Otherwise, set up the changes to the state, and continue without
+	  // actually executing the function (i.e. break;).
+	  // For now, we log:
+	  const MemoryAccessPass::MemoryAccess * mapc;
+	  std::map<llvm::Function *, MemoryAccessPass::MemoryAccess*>::iterator map_it =
+	  		summaries.find(f);
+	  if (map_it == summaries.end()) {
+	  	MemoryAccessPass::MemoryAccess * map = new MemoryAccessPass::MemoryAccess();
+	        klee_message("Analysing: %s", f->getName().data());
+		map->runOnFunction(*f);
+		std::string s;
+		llvm::raw_string_ostream rso(s);
+		map->print(rso, f->getParent());
+		klee_message("Analysis: %s", s.c_str());
+		summaries[f] = map;
+		mapc = map;
+	  } else {
+	  	mapc = map_it->second;
+	  }
+	  klee_message("Analysed: %s summarise: %s", f->getName().data(),
+	          mapc->isSummariseFunction() ? "True" : "False");
+          // Return symbolic value the same width as the return value type
+          ref<Expr> value;
+          bool hasReturnValue = createSymbolicReturnValue(f, value);
+          if (hasReturnValue) {
+            bindLocal(ki, state, value);
+            StackFrame &sf = state.stack.back();
+            sf.results.push_back(value);
+          }
+          break;
         }
-        break;
       }
     }
 

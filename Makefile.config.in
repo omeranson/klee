@@ -84,3 +84,6 @@ CXXFLAGS := @CXXFLAGS@ -g -Wall
 LDFLAGS := @LDFLAGS@ -g
 
 REQUIRES_RTTI := @REQUIRES_RTTI@
+
+# TODO Hard coded
+LLVM_MAP_ROOT = /home/oanson/projects/llvm_memory_access_pass/MemoryAccessPass

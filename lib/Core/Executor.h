@@ -21,8 +21,10 @@
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/util/ArrayCache.h"
-#include "llvm/Support/raw_ostream.h"
 
+#include <MemoryAccess.h>
+
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/ADT/Twine.h"
 
 #include <vector>
@@ -222,6 +224,9 @@ private:
   /// @brief pauseStackNo A unique identifier to this function call. Used to
   /// identify pause stacks.
   unsigned pauseStackNo;
+
+  /// @brief Map an LLVM function pointer to its summaryt.
+  std::map<llvm::Function *, MemoryAccessPass::MemoryAccess *> summaries;
 
   llvm::Function* getTargetFunction(llvm::Value *calledVal,
                                     ExecutionState &state);
