@@ -38,7 +38,7 @@ struct InstructionInfo;
 typedef enum {
 	ExecutionStateReplayState_NoReplay = 0, // "Normal" LATEST algorithm
 	ExecutionStateReplayState_Replay,	// replay in LATEST algorithm
-	ExecutionStateReplayState_Invoking	// Invoking a build function
+	ExecutionStateReplayState_RecursiveNoLATEST	// Do not apply the LATEST algorithm on this function, or any nested functions.
 } ExecutionStateReplayState;
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const MemoryMap &mm);
@@ -175,10 +175,6 @@ public:
   /// @brief replayMessage In case of errors, the instruction+message will be
   /// used to identify that the same error has been reached.
   std::pair<llvm::Instruction*, std::string> replayErrorMessage;
-  /// @brief nonLATESTExecutionDepth The depth in a function call that is being
-  /// executed, despite the use of LATEST algorith. This counts the depth, so
-  /// we know to call nested functions as well.
-  unsigned nonLATESTExecutionDepth;
 
   /// @brief msg The error message with which to terminate this replay state.
   std::string message;

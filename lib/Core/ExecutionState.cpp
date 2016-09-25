@@ -86,7 +86,6 @@ ExecutionState::ExecutionState(KFunction *kf) :
     forkDisabled(false),
     ptreeNode(0),
     replayErrorMessage(std::make_pair((llvm::Instruction*)0, "")),
-    nonLATESTExecutionDepth(0),
     pauseOnRet(false)
     {
   pushFrame(0, kf);
@@ -133,7 +132,6 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     symbolics(state.symbolics),
     arrayNames(state.arrayNames),
     replayErrorMessage(state.replayErrorMessage),
-    nonLATESTExecutionDepth(state.nonLATESTExecutionDepth),
     message(state.message),
     suffix(state.suffix),
     pauseStack(state.pauseStack),

@@ -1418,11 +1418,8 @@ void Executor::executeCall(ExecutionState &state,
     // from just an instruction (unlike LLVM).
     KFunction *kf = kmodule->functionMap[f];
     state.pushFrame(state.prevPC, kf);
-    if (LATESTIsExecuteFunctionAnyway(state, f)) {
-      ++state.nonLATESTExecutionDepth;
-    } else {
-      state.isInReplay() = ExecutionStateReplayState_NoReplay;
-    }
+    state.isInReplay() = (LATESTIsExecuteFunctionAnyway(state, f)) ?
+        ExecutionStateReplayState_RecursiveNoLATEST : ExecutionStateReplayState_NoReplay;
     state.pc = kf->instructions;
 
     if (statsTracker)
@@ -1712,9 +1709,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     }
 
     if (UseLATESTAlgorithm) {
-      if (state.nonLATESTExecutionDepth) {
-        --state.nonLATESTExecutionDepth;
-      } else if (state.isInReplay() == ExecutionStateReplayState_NoReplay) {
+      if (state.isInReplay() == ExecutionStateReplayState_NoReplay) {
         state.isInReplay() = ExecutionStateReplayState_Replay;
 	// 1. Verify the path is feasible
 	if (!isVoidReturn) {
@@ -2782,7 +2777,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 }
 
 bool Executor::LATESTIsExecuteFunctionAnyway(ExecutionState &state, Function *f) {
-  if (state.nonLATESTExecutionDepth) {
+  if (ExecutionStateReplayState_RecursiveNoLATEST == state.isInReplay()) {
     return true;
   }
   const char * name = f->getName().data();
