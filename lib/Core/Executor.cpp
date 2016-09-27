@@ -1636,25 +1636,25 @@ ref<Expr> Executor::extendResult(ref<Expr> result, Instruction *caller) {
 }
 
 bool Executor::verifyPathFeasibility(ExecutionState & state, ref<Expr> & result, bool isAddConstraint) {
-  std::vector<klee::StackFrame>::reverse_iterator sit = state.stack.rbegin();
-  ++sit; // Take the second top-most stack frame
-  if (sit != state.stack.rend()) {
-    StackFrame &sf = *sit;
-    ref<Expr> symbolicResult = sf.results[sf.resultsPosition++];
-    ref<Expr> match = EqExpr::create(symbolicResult, result);
-    bool res;
-    bool success = solver->mayBeTrue(state, match, res);
-    assert(success && "FIXME: Unhandled solver failure");
-    (void) success;
-    if (!res) {
-      terminateStateOnReplayFailed(state);
-      return false;
-    } else {
-      if (isAddConstraint) {
-          addConstraint(state, match);
-      }
-      return true;
+  StackFrame * sf = state.getSecondTopLATESTStackFrame();
+  if (!sf) {
+    return true;
+  }
+  klee_message("verifyPathFeasibility: Result: %d/%lu", sf->resultsPosition, sf->results.size());
+  ref<Expr> symbolicResult = sf->results[sf->resultsPosition++];
+  ref<Expr> match = EqExpr::create(symbolicResult, result);
+  bool res;
+  bool success = solver->mayBeTrue(state, match, res);
+  assert(success && "FIXME: Unhandled solver failure");
+  (void) success;
+  if (!res) {
+    terminateStateOnReplayFailed(state);
+    return false;
+  } else {
+    if (isAddConstraint) {
+        addConstraint(state, match);
     }
+    return true;
   }
   return true;
 }
@@ -2807,8 +2807,7 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
   bool hasReturnValue = createSymbolicReturnValue(f, value);
   if (hasReturnValue) {
     bindLocal(ki, state, value);
-    StackFrame &sf = state.stack.back();
-    sf.results.push_back(value);
+    state.LATESTResults().push_back(value);
   }
 }
 
