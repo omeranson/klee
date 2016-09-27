@@ -1986,9 +1986,14 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     if (UseLATESTAlgorithm) {
       bool execAnyway = LATESTIsExecuteFunctionAnyway(state, f);
       if (!execAnyway) {
+	const MemoryAccessPass::MemoryAccess * map = getSummary(f);
+	bool isSummariseFunction = map->isSummariseFunction();
+	klee_message("Analysed: %s summarise: %s", f->getName().data(),
+	        isSummariseFunction ? "True" : "False");
         if (ExecutionStateReplayState_Replay == state.isInReplay()) {
           state.pauseStack.push_back(pauseStackNo++);
-          state.nextIsInReplay = ExecutionStateReplayState_NoReplay;
+          state.nextIsInReplay = isSummariseFunction ?
+	          ExecutionStateReplayState_NoReplay : ExecutionStateReplayState_SkipLATEST;
         } else {
 	  // Here we classify. If classification says function is too complex,
 	  // we symbolically execute (have executeCall set isInReplay to
@@ -1996,19 +2001,18 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 	  // Otherwise, set up the changes to the state, and continue without
 	  // actually executing the function (i.e. break;).
 	  // For now, we log:
-	  const MemoryAccessPass::MemoryAccess * map = getSummary(f);
-	  bool isSummariseFunction = map->isSummariseFunction();
-	  klee_message("Analysed: %s summarise: %s", f->getName().data(),
-	          isSummariseFunction ? "True" : "False");
-          // Return symbolic value the same width as the return value type
-	  summariseFunctionCall(state, ki, f);
-          break;
+          if (!isSummariseFunction) {
+            state.nextIsInReplay = ExecutionStateReplayState_SkipLATEST;
+          } else {
+            // Return symbolic value the same width as the return value type
+	    summariseFunctionCall(state, ki, f);
+            break;
+          }
         }
       } else {
         state.nextIsInReplay = ExecutionStateReplayState_RecursiveNoLATEST;
       }
     }
-
     // evaluate arguments
     std::vector< ref<Expr> > arguments;
     arguments.reserve(numArgs);
