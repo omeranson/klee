@@ -221,6 +221,9 @@ public:
 
   ExecutionStateReplayState & isInReplay();
   ExecutionStateReplayState & isInReplaySkippingSkipped();
+  StackFrame & getTopLATESTStackFrame();
+  std::vector<bool> & path_latest();
+  int replayPosition();
 };
 }
 

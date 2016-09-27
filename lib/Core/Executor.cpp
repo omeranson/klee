@@ -816,11 +816,11 @@ void Executor::branch(ExecutionState &state,
       if (!result[i]) {
         continue;
       }
-      StackFrame &sf = result[i]->stack.back();
+      std::vector<bool> path_latest = result[i]->path_latest();
       for (unsigned j = 0; j < i; j++) {
-        sf.path_latest.push_back(false);
+        path_latest.push_back(false);
       }
-      sf.path_latest.push_back(true);
+      path_latest.push_back(true);
     }
   }
 }
@@ -831,7 +831,7 @@ bool Executor::isReplayPath(ExecutionState &state) {
 }
 
 bool Executor::getReplayPathBranch(ExecutionState & state) {
-  StackFrame &sf = state.stack.back();
+  StackFrame &sf = state.getTopLATESTStackFrame();
   assert(((sf.replayPosition<sf.path_latest.size()) ||
   		(replayPath && (replayPosition<replayPath->size()))) &&
              "ran out of branches in replay path mode");
@@ -987,8 +987,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     }
 
     if (UseLATESTAlgorithm) {
-      StackFrame &sf = current.stack.back();
-      sf.path_latest.push_back(true);
+      current.path_latest().push_back(true);
     }
     return StatePair(&current, 0);
   } else if (res==Solver::False) {
@@ -999,8 +998,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     }
 
     if (UseLATESTAlgorithm) {
-      StackFrame &sf = current.stack.back();
-      sf.path_latest.push_back(false);
+      current.path_latest().push_back(false);
     }
     return StatePair(0, &current);
   } else {
@@ -1069,10 +1067,8 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     addConstraint(*falseState, Expr::createIsZero(condition));
 
     if (UseLATESTAlgorithm) { // Won't get here on replay
-      StackFrame &true_sf = trueState->stack.back();
-      StackFrame &false_sf = falseState->stack.back();
-      true_sf.path_latest.push_back(true);
-      false_sf.path_latest.push_back(false);
+      trueState->path_latest().push_back(true);
+      falseState->path_latest().push_back(false);
     }
 
     // Kinda gross, do we even really still want this option?

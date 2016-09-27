@@ -406,6 +406,10 @@ ExecutionStateReplayState & ExecutionState::isInReplay() {
 }
 
 ExecutionStateReplayState & ExecutionState::isInReplaySkippingSkipped() {
+  return getTopLATESTStackFrame().isInReplay;
+}
+
+StackFrame & ExecutionState::getTopLATESTStackFrame() {
   // @pre topmost level is either Replay or NoReplay
   for (stack_ty::reverse_iterator it = stack.rbegin(),
                           ie = stack.rend();
@@ -413,7 +417,17 @@ ExecutionStateReplayState & ExecutionState::isInReplaySkippingSkipped() {
     if (ExecutionStateReplayState_SkipLATEST == it->isInReplay) {
       continue;
     }
-    return it->isInReplay;
+    return *it;
   }
   assert(false && "No non-skipped stack frames.");
+}
+
+std::vector<bool> & ExecutionState::path_latest() {
+  StackFrame & sf = getTopLATESTStackFrame();
+  return sf.path_latest;
+}
+
+int ExecutionState::replayPosition() {
+  StackFrame & sf = getTopLATESTStackFrame();
+  return sf.replayPosition;
 }
