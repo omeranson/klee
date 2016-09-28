@@ -1635,30 +1635,6 @@ ref<Expr> Executor::extendResult(ref<Expr> result, Instruction *caller) {
   return result;
 }
 
-bool Executor::verifyPathFeasibility(ExecutionState & state, ref<Expr> & result, bool isAddConstraint) {
-  StackFrame * sf = state.getSecondTopLATESTStackFrame();
-  if (!sf) {
-    return true;
-  }
-  klee_message("verifyPathFeasibility: Result: %d/%lu", sf->resultsPosition, sf->results.size());
-  ref<Expr> symbolicResult = sf->results[sf->resultsPosition++];
-  ref<Expr> match = EqExpr::create(symbolicResult, result);
-  bool res;
-  bool success = solver->mayBeTrue(state, match, res);
-  assert(success && "FIXME: Unhandled solver failure");
-  (void) success;
-  if (!res) {
-    terminateStateOnReplayFailed(state);
-    return false;
-  } else {
-    if (isAddConstraint) {
-        addConstraint(state, match);
-    }
-    return true;
-  }
-  return true;
-}
-
 void Executor::setPauseOnRetByStack(ExecutionState & state, bool value) {
   for (std::set<ExecutionState*>::iterator sit=states.begin(),
                                            eit=states.end();
@@ -1712,10 +1688,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     if (UseLATESTAlgorithm) {
       if (state.isInReplay() == ExecutionStateReplayState_NoReplay) {
 	// 1. Verify the path is feasible
-	if (!isVoidReturn) {
-	  if (!verifyPathFeasibility(state, result, false)) {
-	    break;
-	  }
+	if (!verifyPathFeasibility(state, result, !isVoidReturn, false)) {
+	  break;
 	}
 	// 2. replay the function
 	statePathFeasible(state, false, 0, 0);
@@ -1728,10 +1702,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 	break; // We'll come here again when isInReplay is 'Replay'
       } else if (state.isInReplay() == ExecutionStateReplayState_Replay) {
 	// 3. verify the path is still feasible
-	if (!isVoidReturn) {
-	  if (!verifyPathFeasibility(state, result, true)) {
-	    break;
-	  }
+	if (!verifyPathFeasibility(state, result, !isVoidReturn, true)) {
+	  break;
 	}
 	// 4. Pause others. Resume upon replay failed.
 	if (state.coveredNew) {
@@ -2801,7 +2773,7 @@ const MemoryAccessPass::MemoryAccess * Executor::getSummary(Function * f) {
   std::string s;
   llvm::raw_string_ostream rso(s);
   map->print(rso, f->getParent());
-  klee_message("Analysis: %s", s.c_str());
+  klee_message("Analysis: %s", rso.str().c_str());
   summaries[f] = map;
   return map;
 }
@@ -2813,6 +2785,90 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
     bindLocal(ki, state, value);
     state.LATESTResults().push_back(value);
   }
+  const MemoryAccessPass::MemoryAccess * map = getSummary(f);
+  const MemoryAccessPass::MemoryAccessData * data = map->getSummaryData();
+  // ATM only support globals
+  const MemoryAccessPass::StoreBaseToValuesMap & globalStores = data->globalStores;
+  for (MemoryAccessPass::StoreBaseToValuesMap::const_iterator it = globalStores.begin(),
+								ie = globalStores.end();
+          it != ie; it++) {
+    const llvm::Value * value = it->first;
+    Expr::Width width = getWidthForPointedValuePointer(value);
+    std::string s;
+    llvm::raw_string_ostream rso(s);
+    rso << "Summarising global " << *value << " is constant: " << llvm::isa<Constant>(value);
+    klee_message("%s", rso.str().c_str());
+    ref<Expr> symbolicValue;
+    createSymbolicValue(width, StringRef("global"), symbolicValue);
+    state.LATESTResults().push_back(symbolicValue);
+    const llvm::Constant * valueAsConstant = dyn_cast<Constant>(value);
+    assert(valueAsConstant && "Cast failed");
+    ref<Expr> address = evalConstant(valueAsConstant);
+    executeMemoryOperation(state, true, address, symbolicValue, 0);
+  }
+}
+
+bool Executor::verifyPathFeasibility(ExecutionState & state, ref<Expr> & result, bool hasReturnValue, bool isAddConstraint) {
+  StackFrame * sf = state.getSecondTopLATESTStackFrame();
+  if (!sf) {
+    return true;
+  }
+  if (hasReturnValue) {
+    ref<Expr> symbolicResult = sf->results[sf->resultsPosition++];
+    ref<Expr> match = EqExpr::create(symbolicResult, result);
+    bool res;
+    bool success = solver->mayBeTrue(state, match, res);
+    assert(success && "FIXME: Unhandled solver failure");
+    (void) success;
+    if (!res) {
+      terminateStateOnReplayFailed(state);
+      return false;
+    } else {
+      if (isAddConstraint) {
+          addConstraint(state, match);
+      }
+    }
+  }
+  KInstIterator kcaller = state.stack.back().caller;
+  Instruction *caller = kcaller ? kcaller->inst : 0;
+  if (!caller) {
+    return true;
+  }
+  Function * f = 0;
+  if (isa<CallInst>(caller)) {
+    CallInst * callInstruction = cast<CallInst>(caller);
+    f = callInstruction->getCalledFunction();
+  } else if (isa<InvokeInst>(caller)) {
+    InvokeInst * invokeInstruction = cast<InvokeInst>(caller);
+    f = invokeInstruction->getCalledFunction();
+  }
+  assert(f && "Get function failed");
+  const MemoryAccessPass::MemoryAccess * map = getSummary(f);
+  const MemoryAccessPass::MemoryAccessData * data = map->getSummaryData();
+  // ATM only support globals
+  const MemoryAccessPass::StoreBaseToValuesMap & globalStores = data->globalStores;
+  for (MemoryAccessPass::StoreBaseToValuesMap::const_iterator it = globalStores.begin(),
+								ie = globalStores.end();
+          it != ie; it++) {
+    const llvm::Value * value = it->first;
+    ref<Expr> symbolicValue = sf->results[sf->resultsPosition++];
+    ref<Expr> evaluatedValue;
+    getExpressionFromMemory(state, value, evaluatedValue);
+    ref<Expr> match = EqExpr::create(symbolicValue, evaluatedValue);
+    bool res;
+    bool success = solver->mayBeTrue(state, match, res);
+    assert(success && "FIXME: Unhandled solver failure");
+    (void) success;
+    if (!res) {
+      terminateStateOnReplayFailed(state);
+      return false;
+    } else {
+      if (isAddConstraint) {
+          addConstraint(state, match);
+      }
+    }
+  }
+  return true;
 }
 
 bool Executor::LATESTIsExecuteFunctionAnyway(ExecutionState &state, Function *f) {
@@ -2836,20 +2892,26 @@ bool Executor::LATESTIsExecuteFunctionAnyway(ExecutionState &state, Function *f)
   return false;
 }
 
-bool Executor::createSymbolicReturnValue(Function * f, ref<Expr> & result) {
+void Executor::createSymbolicValue(
+		Expr::Width width, llvm::StringRef name,
+		ref<Expr> & result) {
   static unsigned counter = 0;
-  LLVM_TYPE_Q Type *returnType = f->getReturnType();
-  if (returnType == Type::getVoidTy(getGlobalContext())) {
-  	return false;
-  }
-  Expr::Width width = getWidthForLLVMType(returnType);
   size_t size = Expr::getMinBytesForWidth(width);
-  std::stringstream ss;
-  ss << f->getName().data() << "_summary_" << counter++;
-  const std::string & name = ss.str();
-  const Array *array = arrayCache.CreateArray(name, size);
+  std::string symbolicsName;
+  llvm::raw_string_ostream name_rso(symbolicsName);
+  name_rso << name << "_summary_" << counter++;
+  const Array *array = arrayCache.CreateArray(name_rso.str(), size);
   result = Expr::createTempRead(array, width);
   assert(result.get() && "Failed to create symbolic");
+}
+
+bool Executor::createSymbolicReturnValue(Function * f, ref<Expr> & result) {
+  LLVM_TYPE_Q Type *type = f->getReturnType();
+  if (type == Type::getVoidTy(getGlobalContext())) {
+  	return false;
+  }
+  Expr::Width width = getWidthForLLVMType(type);
+  createSymbolicValue(width, f->getName(), result);
   return true;
 }
 
@@ -3381,6 +3443,7 @@ void Executor::terminateStateOnReplayDone(ExecutionState & state) {
 }
 
 void Executor::terminateStateOnReplayFailed(ExecutionState & state) {
+      klee_message("Found infeasible path: %s", state.message.c_str());
       resumeOtherStates(state);
       if (LATESTProcessInfeasibleCases) {
         std::stringstream msg_ss;
@@ -3778,6 +3841,104 @@ void Executor::resolveExact(ExecutionState &state,
   if (unbound) {
     terminateStateOnError(*unbound, "memory error: invalid pointer: " + name,
                           Ptr, NULL, getAddressInfo(*unbound, p));
+  }
+}
+
+// TODO(oanson) Unify this method with executeMemoryOperation.
+// They are very similar.
+void Executor::getExpressionFromMemory(ExecutionState &state,
+                                      const llvm::Value * value,
+                                      ref<Expr> & result) {
+  Expr::Width type = getWidthForPointedValuePointer(value);
+  unsigned bytes = Expr::getMinBytesForWidth(type);
+
+  const llvm::Constant * valueAsConstant = dyn_cast<Constant>(value);
+  ref<Expr> address = evalConstant(valueAsConstant);
+  if (SimplifySymIndices) {
+    if (!isa<ConstantExpr>(address))
+      address = state.constraints.simplifyExpr(address);
+  }
+
+  // fast path: single in-bounds resolution
+  ObjectPair op;
+  bool success;
+  solver->setTimeout(coreSolverTimeout);
+  if (!state.addressSpace.resolveOne(state, solver, address, op, success)) {
+    address = toConstant(state, address, "resolveOne failure");
+    success = state.addressSpace.resolveOne(cast<ConstantExpr>(address), op);
+  }
+  solver->setTimeout(0);
+
+  if (success) {
+    const MemoryObject *mo = op.first;
+
+    if (MaxSymArraySize && mo->size>=MaxSymArraySize) {
+      address = toConstant(state, address, "max-sym-array-size");
+    }
+    
+    ref<Expr> offset = mo->getOffsetExpr(address);
+
+    bool inBounds;
+    solver->setTimeout(coreSolverTimeout);
+    bool success = solver->mustBeTrue(state, 
+                                      mo->getBoundsCheckOffset(offset, bytes),
+                                      inBounds);
+    solver->setTimeout(0);
+    if (!success) {
+      state.pc = state.prevPC;
+      terminateStateEarly(state, "Query timed out (bounds check).");
+      return;
+    }
+
+    if (inBounds) {
+      const ObjectState *os = op.second;
+      result = os->read(offset, type);
+      
+      if (interpreterOpts.MakeConcreteSymbolic)
+        result = replaceReadWithSymbolic(state, result);
+      
+      return;
+    }
+  } 
+
+  // we are on an error path (no resolution, multiple resolution, one
+  // resolution with out of bounds)
+  
+  ResolutionList rl;  
+  solver->setTimeout(coreSolverTimeout);
+  bool incomplete = state.addressSpace.resolve(state, solver, address, rl,
+                                               0, coreSolverTimeout);
+  solver->setTimeout(0);
+  
+  // XXX there is some query wasteage here. who cares?
+  ExecutionState *unbound = &state;
+  
+  for (ResolutionList::iterator i = rl.begin(), ie = rl.end(); i != ie; ++i) {
+    const MemoryObject *mo = i->first;
+    const ObjectState *os = i->second;
+    ref<Expr> inBounds = mo->getBoundsCheckPointer(address, bytes);
+    
+    StatePair branches = fork(*unbound, inBounds, true);
+    ExecutionState *bound = branches.first;
+
+    // bound can be 0 on failure or overlapped 
+    if (bound) {
+      result = os->read(mo->getOffsetExpr(address), type);
+    }
+
+    unbound = branches.second;
+    if (!unbound)
+      break;
+  }
+  
+  // XXX should we distinguish out of bounds and overlapped cases?
+  if (unbound) {
+    if (incomplete) {
+      terminateStateEarly(*unbound, "Query timed out (resolve).");
+    } else {
+      terminateStateOnError(*unbound, "memory error: out of bound pointer", Ptr,
+                            NULL, getAddressInfo(*unbound, address));
+    }
   }
 }
 
@@ -4227,6 +4388,14 @@ void Executor::doImpliedValueConcretization(ExecutionState &state,
 
 Expr::Width Executor::getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const {
   return kmodule->targetData->getTypeSizeInBits(type);
+}
+
+Expr::Width Executor::getWidthForPointedValuePointer(const llvm::Value *pointer) const {
+  LLVM_TYPE_Q llvm::Type *type = pointer->getType();
+  assert(type->isPointerTy() && "Stored address is not a pointer?");
+  LLVM_TYPE_Q llvm::PointerType *pointerType = llvm::cast<llvm::PointerType>(type);
+  LLVM_TYPE_Q llvm::Type *pointedToType = pointerType->getElementType();
+  return getWidthForLLVMType(pointedToType);
 }
 
 ///

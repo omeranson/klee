@@ -315,6 +315,9 @@ private:
                    llvm::Function *f,
                    std::vector< ref<Expr> > &arguments);
                    
+  void getExpressionFromMemory(ExecutionState &state,
+                                      const llvm::Value * value,
+                                      ref<Expr> & result);
   // do address resolution / object binding / out of bounds checking
   // and perform the operation
   void executeMemoryOperation(ExecutionState &state,
@@ -463,7 +466,8 @@ private:
   void terminateStateOnReplayFailed(ExecutionState & state);
   void terminateStateOnBoringReplay(ExecutionState & state);
   ref<Expr> extendResult(ref<Expr> result, llvm::Instruction *caller);
-  bool verifyPathFeasibility(ExecutionState & state, ref<Expr> & result, bool isAddConstraint);
+  bool verifyPathFeasibility(ExecutionState & state, ref<Expr> & result, bool hasReturnValue, bool isAddConstraint);
+  void createSymbolicValue(Expr::Width width, llvm::StringRef name, ref<Expr> & result);
 
   void pauseState(ExecutionState &state);
   void resumeState(ExecutionState &state);
@@ -546,6 +550,7 @@ public:
                                std::map<const std::string*, std::set<unsigned> > &res);
 
   Expr::Width getWidthForLLVMType(LLVM_TYPE_Q llvm::Type *type) const;
+  Expr::Width getWidthForPointedValuePointer(const llvm::Value *pointer) const;
 };
   
 } // End klee namespace
