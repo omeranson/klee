@@ -2787,23 +2787,32 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
   }
   const MemoryAccessPass::MemoryAccess * map = getSummary(f);
   const MemoryAccessPass::MemoryAccessData * data = map->getSummaryData();
-  // ATM only support globals
+  // Globals
   const MemoryAccessPass::StoreBaseToValuesMap & globalStores = data->globalStores;
   for (MemoryAccessPass::StoreBaseToValuesMap::const_iterator it = globalStores.begin(),
 								ie = globalStores.end();
           it != ie; it++) {
     const llvm::Value * value = it->first;
     Expr::Width width = getWidthForPointedValuePointer(value);
-    std::string s;
-    llvm::raw_string_ostream rso(s);
-    rso << "Summarising global " << *value << " is constant: " << llvm::isa<Constant>(value);
-    klee_message("%s", rso.str().c_str());
     ref<Expr> symbolicValue;
-    createSymbolicValue(width, StringRef("global"), symbolicValue);
+    createSymbolicValue(width, value->getName(), symbolicValue);
     state.LATESTResults().push_back(symbolicValue);
     const llvm::Constant * valueAsConstant = dyn_cast<Constant>(value);
     assert(valueAsConstant && "Cast failed");
     ref<Expr> address = evalConstant(valueAsConstant);
+    executeMemoryOperation(state, true, address, symbolicValue, 0);
+  }
+  // Pointers passed as argument
+  const MemoryAccessPass::StoreBaseToValuesMap & argumentStores = data->argumentStores;
+  for (MemoryAccessPass::StoreBaseToValuesMap::const_iterator it = argumentStores.begin(),
+								ie = argumentStores.end();
+          it != ie; it++) {
+    const llvm::Value * value = it->first;
+    Expr::Width width = getWidthForPointedValuePointer(value);
+    ref<Expr> symbolicValue;
+    createSymbolicValue(width, value->getName(), symbolicValue);
+    state.LATESTResults().push_back(symbolicValue);
+    ref<Expr> address = evalAddress(state, value);
     executeMemoryOperation(state, true, address, symbolicValue, 0);
   }
 }
@@ -2845,7 +2854,7 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, ref<Expr> & result,
   assert(f && "Get function failed");
   const MemoryAccessPass::MemoryAccess * map = getSummary(f);
   const MemoryAccessPass::MemoryAccessData * data = map->getSummaryData();
-  // ATM only support globals
+  // Globals
   const MemoryAccessPass::StoreBaseToValuesMap & globalStores = data->globalStores;
   for (MemoryAccessPass::StoreBaseToValuesMap::const_iterator it = globalStores.begin(),
 								ie = globalStores.end();
@@ -2853,7 +2862,36 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, ref<Expr> & result,
     const llvm::Value * value = it->first;
     ref<Expr> symbolicValue = sf->results[sf->resultsPosition++];
     ref<Expr> evaluatedValue;
-    getExpressionFromMemory(state, value, evaluatedValue);
+    const llvm::Constant * valueAsConstant = dyn_cast<Constant>(value);
+    ref<Expr> address = evalConstant(valueAsConstant);
+    Expr::Width width = getWidthForPointedValuePointer(value);
+    getExpressionFromMemory(state, address, width, evaluatedValue);
+    ref<Expr> match = EqExpr::create(symbolicValue, evaluatedValue);
+    bool res;
+    bool success = solver->mayBeTrue(state, match, res);
+    assert(success && "FIXME: Unhandled solver failure");
+    (void) success;
+    if (!res) {
+      terminateStateOnReplayFailed(state);
+      return false;
+    } else {
+      if (isAddConstraint) {
+          addConstraint(state, match);
+      }
+    }
+  }
+  // Pointers passed as argument
+  const MemoryAccessPass::StoreBaseToValuesMap & argumentStores = data->argumentStores;
+  for (MemoryAccessPass::StoreBaseToValuesMap::const_iterator it = argumentStores.begin(),
+								ie = argumentStores.end();
+          it != ie; it++) {
+    const llvm::Value * value = it->first;
+    ref<Expr> symbolicValue = sf->results[sf->resultsPosition++];
+    ref<Expr> address = evalAddress(state, value);
+    ref<Expr> evaluatedValue;
+    Expr::Width width = getWidthForPointedValuePointer(value);
+    getExpressionFromMemory(state, address, width, evaluatedValue);
+
     ref<Expr> match = EqExpr::create(symbolicValue, evaluatedValue);
     bool res;
     bool success = solver->mayBeTrue(state, match, res);
@@ -2869,6 +2907,16 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, ref<Expr> & result,
     }
   }
   return true;
+}
+
+ref<Expr> Executor::evalAddress(ExecutionState & state, const llvm::Value * value) {
+  assert(llvm::isa<llvm::Argument>(value) && "Only direct argument pointer support (TODO)");
+  const llvm::Argument * argument = llvm::cast<llvm::Argument>(value);
+  unsigned argIndex = argument->getArgNo();
+  StackFrame &sf = state.stack.back();
+  unsigned localsIndex = sf.kf->getArgRegister(argIndex);
+  ref<Expr> result = sf.locals[localsIndex].value;
+  return result;
 }
 
 bool Executor::LATESTIsExecuteFunctionAnyway(ExecutionState &state, Function *f) {
@@ -3847,13 +3895,10 @@ void Executor::resolveExact(ExecutionState &state,
 // TODO(oanson) Unify this method with executeMemoryOperation.
 // They are very similar.
 void Executor::getExpressionFromMemory(ExecutionState &state,
-                                      const llvm::Value * value,
+                                      ref<Expr> & address, Expr::Width type,
                                       ref<Expr> & result) {
-  Expr::Width type = getWidthForPointedValuePointer(value);
   unsigned bytes = Expr::getMinBytesForWidth(type);
 
-  const llvm::Constant * valueAsConstant = dyn_cast<Constant>(value);
-  ref<Expr> address = evalConstant(valueAsConstant);
   if (SimplifySymIndices) {
     if (!isa<ConstantExpr>(address))
       address = state.constraints.simplifyExpr(address);

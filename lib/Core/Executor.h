@@ -316,7 +316,8 @@ private:
                    std::vector< ref<Expr> > &arguments);
                    
   void getExpressionFromMemory(ExecutionState &state,
-                                      const llvm::Value * value,
+                                      ref<Expr> & value,
+				      Expr::Width type,
                                       ref<Expr> & result);
   // do address resolution / object binding / out of bounds checking
   // and perform the operation
@@ -375,6 +376,8 @@ private:
                     ref<Expr> value);
 
   ref<klee::ConstantExpr> evalConstantExpr(const llvm::ConstantExpr *ce);
+
+  ref<Expr> evalAddress(ExecutionState & state, const llvm::Value * value);
 
   /// Return a unique constant value for the given expression in the
   /// given state, if it has one (i.e. it provably only has a single
