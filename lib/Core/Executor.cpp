@@ -203,6 +203,12 @@ namespace {
                 cl::init(false),
                 cl::desc("Generate tests cases for all errors "
                          "(default=off, i.e. one per (error,instruction) pair)"));
+
+  cl::opt<bool>
+  EmitMemoryStateOnMemError("emit-memory-state",
+                cl::init(false),
+                cl::desc("Emit memory state on memory state error. "
+                         "(default=off, i.e. one per (error,instruction) pair)"));
   
   cl::opt<bool>
   NoExternals("no-externals", 
@@ -322,6 +328,12 @@ namespace {
   MaxMemoryInhibit("max-memory-inhibit",
             cl::desc("Inhibit forking at memory cap (vs. random terminate) (default=on)"),
             cl::init(true));
+
+  cl::list<std::string>
+  ForceExternal("force-external-symbol",
+            cl::desc("Force this symbol to be external"),
+            cl::value_desc("symbol")
+  );
 }
 
 
@@ -1054,7 +1066,17 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
     } else if (isa<ConstantPointerNull>(c)) {
       return Expr::createPointer(0);
     } else if (isa<UndefValue>(c) || isa<ConstantAggregateZero>(c)) {
-      return ConstantExpr::create(0, getWidthForLLVMType(c->getType()));
+      Expr::Width w = getWidthForLLVMType(c->getType());
+      if (w == Expr::InvalidWidth) {
+        klee_warning("Invalid ConstantExpr: v=%u, w=%u, typeID=%u, sized=%d",
+                     0,
+                     w,
+                     c->getType()->getTypeID(),
+                     c->getType()->isSized()
+	);
+	w = 1;
+      }
+      return ConstantExpr::create(0, w);
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 1)
     } else if (const ConstantDataSequential *cds =
                  dyn_cast<ConstantDataSequential>(c)) {
@@ -1274,12 +1296,31 @@ void Executor::stepInstruction(ExecutionState &state) {
     haltExecution = true;
 }
 
+bool Executor::isForcedExternal(Function * f) {
+	std::string name = f->getName().str();
+	return isForcedExternal(name);
+}
+
+bool Executor::isForcedExternal(std::string & name) {
+  std::vector<std::string>::iterator fe_it;
+  std::vector<std::string>::iterator fe_ie;
+  for (fe_it = ForceExternal.begin(), fe_ie = ForceExternal.end();
+          fe_it != fe_ie; ++fe_it) {
+    if (name == *fe_it) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void Executor::executeCall(ExecutionState &state, 
                            KInstruction *ki,
                            Function *f,
                            std::vector< ref<Expr> > &arguments) {
   Instruction *i = ki->inst;
-  if (f && f->isDeclaration()) {
+  if (f && isForcedExternal(f)) {
+      callExternalFunction(state, ki, f, arguments);
+  } else if (f && f->isDeclaration()) {
     switch(f->getIntrinsicID()) {
     case Intrinsic::not_intrinsic:
       // state may be destroyed by this call, cannot touch
@@ -1495,9 +1536,9 @@ Function* Executor::getTargetFunction(Value *calledVal, ExecutionState &state) {
      
       if (Function *f = dyn_cast<Function>(gv))
         return f;
-      else if (GlobalAlias *ga = dyn_cast<GlobalAlias>(gv))
+      else if (GlobalAlias *ga = dyn_cast<GlobalAlias>(gv)) {
         c = ga->getAliasee();
-      else
+      } else
         return 0;
     } else if (llvm::ConstantExpr *ce = dyn_cast<llvm::ConstantExpr>(c)) {
       if (ce->getOpcode()==Instruction::BitCast)
@@ -2555,9 +2596,66 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     break;
   }
 #endif
-
-  // Other instructions...
-  // Unhandled
+    // Other instructions...
+  case Instruction::AtomicRMW: {
+    ref<Expr> addr = eval(ki, 0, state).value; /* *p */
+    ref<Expr> operand = eval(ki, 1, state).value; /* v */
+    executeMemoryOperation(state, false, addr, 0, ki);
+    ref<Expr> value;
+    AtomicRMWInst * armwi = cast<AtomicRMWInst>(i);
+    switch (armwi->getOperation()) {
+	/// *p = v
+	case AtomicRMWInst::Xchg:
+	    value = operand;
+	    break;
+	/// *p = old + v
+	case AtomicRMWInst::Add:
+	    value = AddExpr::create(getDestCell(state, ki).value, operand);
+	    break;
+	/// *p = old - v
+	case AtomicRMWInst::Sub:
+	    value = SubExpr::create(getDestCell(state, ki).value, operand);
+	    break;
+	/// *p = old & v
+	case AtomicRMWInst::And:
+	    value = AndExpr::create(getDestCell(state, ki).value, operand);
+	    break;
+	/// *p = ~(old & v)
+	case AtomicRMWInst::Nand:
+	    value = NotExpr::create(AndExpr::create(getDestCell(state, ki).value, operand));
+	    break;
+	/// *p = old | v
+	case AtomicRMWInst::Or:
+	    value = OrExpr::create(getDestCell(state, ki).value, operand);
+	    break;
+	/// *p = old ^ v
+	case AtomicRMWInst::Xor:
+	    value = XorExpr::create(getDestCell(state, ki).value, operand);
+	    break;
+	/// *p = old >signed v ? old : v
+	case AtomicRMWInst::Max:
+	    terminateStateOnExecError(state, "illegal atomic instruction: Max");
+	    break;
+	/// *p = old <signed v ? old : v
+	case AtomicRMWInst::Min:
+	    terminateStateOnExecError(state, "illegal atomic instruction: Min");
+	    break;
+	/// *p = old >unsigned v ? old : v
+	case AtomicRMWInst::UMax:
+	    terminateStateOnExecError(state, "illegal atomic instruction: UMax");
+	    break;
+	/// *p = old <unsigned v ? old : v
+	case AtomicRMWInst::UMin:
+	    terminateStateOnExecError(state, "illegal atomic instruction: UMin");
+	    break;
+	default:
+	    terminateStateOnExecError(state, "illegal atomic instruction");
+	    break;
+    }
+    executeMemoryOperation(state, true, addr, value, 0);
+    break;
+  }
+    // Unhandled
   case Instruction::ExtractElement:
   case Instruction::InsertElement:
   case Instruction::ShuffleVector:
@@ -2566,7 +2664,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     break;
  
   default:
-    terminateStateOnExecError(state, "illegal instruction");
+    {
+	std::string opcodeName = i->getOpcodeName();
+	terminateStateOnExecError(state, "illegal instruction " + opcodeName);
+    }
     break;
   }
 }
@@ -2828,32 +2929,48 @@ std::string Executor::getAddressInfo(ExecutionState &state,
     info << "\trange: [" << res.first << ", " << res.second <<"]\n";
   }
   
-  MemoryObject hack((unsigned) example);    
-  MemoryMap::iterator lower = state.addressSpace.objects.upper_bound(&hack);
-  info << "\tnext: ";
-  if (lower==state.addressSpace.objects.end()) {
-    info << "none\n";
-  } else {
-    const MemoryObject *mo = lower->first;
-    std::string alloc_info;
-    mo->getAllocInfo(alloc_info);
-    info << "object at " << mo->address
-         << " of size " << mo->size << "\n"
-         << "\t\t" << alloc_info << "\n";
-  }
-  if (lower!=state.addressSpace.objects.begin()) {
-    --lower;
-    info << "\tprev: ";
+  if (!EmitMemoryStateOnMemError) {
+    MemoryObject hack((unsigned) example);
+    MemoryMap::iterator lower = state.addressSpace.objects.upper_bound(&hack);
+    info << "\tnext: ";
     if (lower==state.addressSpace.objects.end()) {
       info << "none\n";
     } else {
       const MemoryObject *mo = lower->first;
       std::string alloc_info;
       mo->getAllocInfo(alloc_info);
-      info << "object at " << mo->address 
+      info << "object at " << mo->address
            << " of size " << mo->size << "\n"
            << "\t\t" << alloc_info << "\n";
     }
+    if (lower!=state.addressSpace.objects.begin()) {
+      --lower;
+      info << "\tprev: ";
+      if (lower==state.addressSpace.objects.end()) {
+        info << "none\n";
+      } else {
+        const MemoryObject *mo = lower->first;
+        std::string alloc_info;
+        mo->getAllocInfo(alloc_info);
+        info << "object at " << mo->address
+             << " of size " << mo->size << "\n"
+             << "\t\t" << alloc_info << "\n";
+      }
+    }
+  } else {
+    int objcount = 0;
+    info << "Object is at: " << example << "\n";
+    MemoryMap::iterator it = state.addressSpace.objects.begin();
+    while (it != state.addressSpace.objects.end()) {
+        const MemoryObject *mo = it->first;
+        std::string alloc_info;
+        mo->getAllocInfo(alloc_info);
+        info << "object " << objcount++ << " at " << mo->address
+             << " of size " << mo->size << "\n"
+             << "\t\t" << alloc_info << "\n";
+        ++it;
+    }
+
   }
 
   return info.str();
@@ -3539,6 +3656,9 @@ void Executor::runFunctionAsMain(Function *f,
 
   unsigned NumPtrBytes = Context::get().getPointerWidth() / 8;
   KFunction *kf = kmodule->functionMap[f];
+  if (!kf) {
+	  klee_error("Could not find function in kmodule: %s", f->getName().str().c_str());
+  }
   assert(kf);
   Function::arg_iterator ai = f->arg_begin(), ae = f->arg_end();
   if (ai!=ae) {
