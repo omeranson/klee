@@ -295,6 +295,12 @@ private:
                    llvm::Function *f,
                    std::vector< ref<Expr> > &arguments);
                    
+  void getExpressionFromMemory(ExecutionState &state,
+                                      ref<Expr> & value,
+				      Expr::Width type,
+                                      ref<Expr> & result);
+  bool isForcedExternal(llvm::Function * f);
+  bool isForcedExternal(std::string & name);
   // do address resolution / object binding / out of bounds checking
   // and perform the operation
   void executeMemoryOperation(ExecutionState &state,
