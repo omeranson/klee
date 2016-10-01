@@ -319,6 +319,8 @@ private:
                                       ref<Expr> & value,
 				      Expr::Width type,
                                       ref<Expr> & result);
+  bool isForcedExternal(llvm::Function * f);
+  bool isForcedExternal(std::string & name);
   // do address resolution / object binding / out of bounds checking
   // and perform the operation
   void executeMemoryOperation(ExecutionState &state,
