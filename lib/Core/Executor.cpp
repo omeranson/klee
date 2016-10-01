@@ -2788,8 +2788,8 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
   const MemoryAccessPass::MemoryAccess * map = getSummary(f);
   const MemoryAccessPass::MemoryAccessData * data = map->getSummaryData();
   // Globals
-  const MemoryAccessPass::StoreBaseToValuesMap & globalStores = data->globalStores;
-  for (MemoryAccessPass::StoreBaseToValuesMap::const_iterator it = globalStores.begin(),
+  const MemoryAccessPass::StoreBaseToValueMap & globalStores = data->globalStores;
+  for (MemoryAccessPass::StoreBaseToValueMap::const_iterator it = globalStores.begin(),
 								ie = globalStores.end();
           it != ie; it++) {
     const llvm::Value * value = it->first;
@@ -2803,8 +2803,8 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
     executeMemoryOperation(state, true, address, symbolicValue, 0);
   }
   // Pointers passed as argument
-  const MemoryAccessPass::StoreBaseToValuesMap & argumentStores = data->argumentStores;
-  for (MemoryAccessPass::StoreBaseToValuesMap::const_iterator it = argumentStores.begin(),
+  const MemoryAccessPass::StoreBaseToValueMap & argumentStores = data->argumentStores;
+  for (MemoryAccessPass::StoreBaseToValueMap::const_iterator it = argumentStores.begin(),
 								ie = argumentStores.end();
           it != ie; it++) {
     const llvm::Value * value = it->first;
@@ -2855,8 +2855,8 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, ref<Expr> & result,
   const MemoryAccessPass::MemoryAccess * map = getSummary(f);
   const MemoryAccessPass::MemoryAccessData * data = map->getSummaryData();
   // Globals
-  const MemoryAccessPass::StoreBaseToValuesMap & globalStores = data->globalStores;
-  for (MemoryAccessPass::StoreBaseToValuesMap::const_iterator it = globalStores.begin(),
+  const MemoryAccessPass::StoreBaseToValueMap & globalStores = data->globalStores;
+  for (MemoryAccessPass::StoreBaseToValueMap::const_iterator it = globalStores.begin(),
 								ie = globalStores.end();
           it != ie; it++) {
     const llvm::Value * value = it->first;
@@ -2881,8 +2881,8 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, ref<Expr> & result,
     }
   }
   // Pointers passed as argument
-  const MemoryAccessPass::StoreBaseToValuesMap & argumentStores = data->argumentStores;
-  for (MemoryAccessPass::StoreBaseToValuesMap::const_iterator it = argumentStores.begin(),
+  const MemoryAccessPass::StoreBaseToValueMap & argumentStores = data->argumentStores;
+  for (MemoryAccessPass::StoreBaseToValueMap::const_iterator it = argumentStores.begin(),
 								ie = argumentStores.end();
           it != ie; it++) {
     const llvm::Value * value = it->first;
