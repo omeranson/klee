@@ -2016,8 +2016,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       if (!execAnyway) {
         const MemoryAccessPass::MemoryAccessInstVisitor * visitor = summaries.getVisitor(f);
         bool isSummariseFunction = visitor->isSummariseFunction();
-        klee_message("Analysed: %s summarise: %s", f->getName().data(),
-                isSummariseFunction ? "True" : "False");
         if (ExecutionStateReplayState_Replay == state.isInReplay()) {
           state.pauseStack.push_back(pauseStackNo++);
           state.nextIsInReplay = isSummariseFunction ?
@@ -3611,7 +3609,6 @@ void Executor::terminateStateOnReplayDone(ExecutionState & state) {
 }
 
 void Executor::terminateStateOnReplayFailed(ExecutionState & state) {
-      klee_message("Found infeasible path: %s", state.message.c_str());
       resumeOtherStates(state);
       if (LATESTProcessInfeasibleCases) {
         std::stringstream msg_ss;
@@ -3649,12 +3646,6 @@ void Executor::terminateStateOnError(ExecutionState &state,
   std::pair<llvm::Instruction*, std::string> key = std::make_pair(lastInst, message);
   if (key == state.replayErrorMessage) {
     // Great. Path is feasible.
-    std::stringstream ss;
-    terminateStateOnReplayDone(state);
-    return;
-  }
-  if (EmitAllErrors ||
-      emittedErrors.insert(key).second) {
     if (ii.file != "") {
       klee_message("ERROR: %s:%d: %s", ii.file.c_str(), ii.line, message.c_str());
     } else {
@@ -3663,6 +3654,11 @@ void Executor::terminateStateOnError(ExecutionState &state,
     if (!EmitAllErrors)
       klee_message("NOTE: now ignoring this error at this location");
 
+    terminateStateOnReplayDone(state);
+    return;
+  }
+  if (EmitAllErrors ||
+      emittedErrors.insert(key).second) {
     std::string MsgString;
     llvm::raw_string_ostream msg(MsgString);
     msg << "Error: " << message << "\n";
