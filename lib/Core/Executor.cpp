@@ -1187,7 +1187,6 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
       ref<Expr> res = ConcatExpr::createN(kids.size(), kids.data());
       return cast<ConstantExpr>(res);
     } else if (const ConstantVector *cv = dyn_cast<ConstantVector>(c)) {
-	  klee_message("evalConstant(): Is a vector");
       llvm::SmallVector<ref<Expr>, 4> kids;
       for (unsigned i = cv->getNumOperands(); i != 0; --i) {
         unsigned op = i-1;
