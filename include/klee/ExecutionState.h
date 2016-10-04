@@ -224,7 +224,7 @@ public:
   StackFrame & getTopLATESTStackFrame();
   StackFrame * getSecondTopLATESTStackFrame();
   std::vector<bool> & path_latest();
-  int replayPosition();
+  unsigned & replayPosition();
   std::vector<ref<Expr> > & LATESTResults();
 };
 }

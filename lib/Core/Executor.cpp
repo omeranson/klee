@@ -738,7 +738,19 @@ void Executor::branch(ExecutionState &state,
   unsigned N = conditions.size();
   assert(N);
 
-  assert((!state.isInReplay()) && "State replay not supported for branch");
+  if (UseLATESTAlgorithm &&
+        (state.isInReplaySkippingSkipped() == ExecutionStateReplayState_Replay)) {
+    unsigned count = 0;
+    std::vector<bool> & path_latest = state.path_latest();
+    unsigned & replayPosition = state.replayPosition();
+    result.assign(N, NULL);
+    while (!path_latest[replayPosition++]) {
+      count++; // There's a more efficient way to do this
+    }
+    result[count] = &state;
+    addConstraint(state, conditions[count]);
+    return;
+  }
   if (MaxForks!=~0u && stats::forks >= MaxForks) {
     unsigned next = theRNG.getInt32() % N;
     for (unsigned i=0; i<N; ++i) {

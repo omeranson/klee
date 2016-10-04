@@ -445,7 +445,7 @@ std::vector<bool> & ExecutionState::path_latest() {
   return sf.path_latest;
 }
 
-int ExecutionState::replayPosition() {
+unsigned & ExecutionState::replayPosition() {
   StackFrame & sf = getTopLATESTStackFrame();
   return sf.replayPosition;
 }
