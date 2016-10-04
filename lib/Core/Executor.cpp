@@ -2879,7 +2879,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 
 void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, Function * f) {
   ref<Expr> value;
-  bool hasReturnValue = createSymbolicReturnValue(f, value);
+  bool hasReturnValue = createSymbolicReturnValue(ki->inst, f, value);
   if (hasReturnValue) {
     bindLocal(ki, state, value);
     state.LATESTResults().push_back(value);
@@ -3055,8 +3055,8 @@ void Executor::createSymbolicValue(
   assert(result.get() && "Failed to create symbolic");
 }
 
-bool Executor::createSymbolicReturnValue(Function * f, ref<Expr> & result) {
-  LLVM_TYPE_Q Type *type = f->getReturnType();
+bool Executor::createSymbolicReturnValue(const Instruction * caller, Function * f, ref<Expr> & result) {
+  LLVM_TYPE_Q Type *type = caller->getType();
   if (type == Type::getVoidTy(getGlobalContext())) {
   	return false;
   }

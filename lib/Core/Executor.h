@@ -467,7 +467,7 @@ private:
   bool isReplayPath(ExecutionState&);
   bool getReplayPathBranch(ExecutionState&);
   bool LATESTIsExecuteFunctionAnyway(ExecutionState&, llvm::Function*);
-  bool createSymbolicReturnValue(llvm::Function*, ref<Expr>&);
+  bool createSymbolicReturnValue(const llvm::Instruction *, llvm::Function *, ref<Expr> &);
   void terminateStateOnReplayDone(ExecutionState & state);
   void terminateStateOnReplayFailed(ExecutionState & state);
   void terminateStateOnBoringReplay(ExecutionState & state);
