@@ -3010,6 +3010,9 @@ bool Executor::LATESTIsExecuteFunctionAnyway(ExecutionState &state, Function *f)
   if (ExecutionStateReplayState_RecursiveNoLATEST == state.isInReplay()) {
     return true;
   }
+  if (!f) {
+    return true;
+  }
   const char * name = f->getName().data();
   if (strncmp(name, "klee_", sizeof("klee_")-1) == 0) {
     // Functions beginning with klee_ are always executed
