@@ -3566,10 +3566,12 @@ void Executor::statePathFeasible(ExecutionState & state, bool isFork,
     clone->ptreeNode = res.first;
     state.ptreeNode = res.second;
   }
-  // set replay state
-  clone->isInReplay() = ExecutionStateReplayState_Replay;
+  StackFrame &sf = clone->getTopLATESTStackFrame();
+  while (&clone->stack.back() != &sf) {
+    clone->stack.pop_back();
+  }
+  sf.isInReplay = ExecutionStateReplayState_Replay;
   // set entry point
-  StackFrame &sf = clone->stack.back();
   KFunction *kf = sf.kf;
   clone->pc = kf->instructions;
   clone->prevPC = clone->pc;
