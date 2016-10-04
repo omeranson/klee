@@ -1736,7 +1736,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     }
 
     if (UseLATESTAlgorithm) {
-      if (state.isInReplay() == ExecutionStateReplayState_NoReplay) {
+      if (state.isInReplay() == ExecutionStateReplayState_FirstPass) {
 	// 1. Verify the path is feasible
 	if (!verifyPathFeasibility(state, result, !isVoidReturn, false)) {
 	  break;
@@ -2015,7 +2015,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
         if (ExecutionStateReplayState_Replay == state.isInReplay()) {
           state.pauseStack.push_back(pauseStackNo++);
           state.nextIsInReplay = isSummariseFunction ?
-	          ExecutionStateReplayState_NoReplay : ExecutionStateReplayState_SkipLATEST;
+	          ExecutionStateReplayState_FirstPass : ExecutionStateReplayState_SkipLATEST;
         } else {
 	  // Here we classify. If classification says function is too complex,
 	  // we symbolically execute (have executeCall set isInReplay to

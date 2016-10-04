@@ -36,7 +36,7 @@ class MemoryObject;
 class PTreeNode;
 struct InstructionInfo;
 typedef enum {
-	ExecutionStateReplayState_NoReplay = 0, // "Normal" LATEST algorithm
+	ExecutionStateReplayState_FirstPass = 0, // "Normal" LATEST algorithm
 	ExecutionStateReplayState_Replay,	// replay in LATEST algorithm
 	ExecutionStateReplayState_RecursiveNoLATEST,	// Do not apply the LATEST algorithm on this function, or any nested functions.
 	ExecutionStateReplayState_SkipLATEST	// This method is too complex to summarise. Symbolically execute directly.

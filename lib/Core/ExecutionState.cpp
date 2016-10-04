@@ -45,7 +45,7 @@ namespace {
 StackFrame::StackFrame(KInstIterator _caller, KFunction *_kf)
   : caller(_caller), kf(_kf), callPathNode(0), 
     minDistToUncoveredOnReturn(0), varargs(0),
-    isInReplay(ExecutionStateReplayState_NoReplay),
+    isInReplay(ExecutionStateReplayState_FirstPass),
     replayPosition(0), resultsPosition(0) {
   locals = new Cell[kf->numRegisters];
 }
@@ -86,7 +86,7 @@ ExecutionState::ExecutionState(KFunction *kf) :
     forkDisabled(false),
     ptreeNode(0),
     replayErrorMessage(std::make_pair((llvm::Instruction*)0, "")),
-    nextIsInReplay(ExecutionStateReplayState_NoReplay),
+    nextIsInReplay(ExecutionStateReplayState_FirstPass),
     pauseOnRet(false)
     {
   pushFrame(0, kf);
