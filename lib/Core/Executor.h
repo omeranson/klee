@@ -151,6 +151,10 @@ private:
   /// @brief pausedStates - States that are now paused
   std::set<ExecutionState*> pausedStates;
 
+  /// @brief summaries - Instance of MemoryAccessPass which summarises and
+  /// classifies methods
+  MemoryAccessPass::MemoryAccess summaries;
+
   /// When non-empty the Executor is running in "seed" mode. The
   /// states in this map will be executed in an arbitrary order
   /// (outside the normal search interface) until they terminate. When
@@ -225,9 +229,6 @@ private:
   /// identify pause stacks.
   unsigned pauseStackNo;
 
-  /// @brief Map an LLVM function pointer to its summaryt.
-  std::map<llvm::Function *, MemoryAccessPass::MemoryAccess *> summaries;
-  const MemoryAccessPass::MemoryAccess * getSummary(llvm::Function * f);
   void summariseFunctionCall(ExecutionState & , KInstruction * , llvm::Function * );
 
   llvm::Function* getTargetFunction(llvm::Value *calledVal,

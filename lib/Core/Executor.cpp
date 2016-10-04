@@ -483,11 +483,6 @@ const Module *Executor::setModule(llvm::Module *module,
 }
 
 Executor::~Executor() {
-  for (std::map<llvm::Function *, MemoryAccessPass::MemoryAccess*>::iterator
-			 it = summaries.begin(), ie = summaries.end();
-  		it != ie; it++) {
-	delete it->second;
-  }
   delete memory;
   delete externalDispatcher;
   if (processTree)
@@ -2008,10 +2003,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     if (UseLATESTAlgorithm) {
       bool execAnyway = LATESTIsExecuteFunctionAnyway(state, f);
       if (!execAnyway) {
-	const MemoryAccessPass::MemoryAccess * map = getSummary(f);
-	bool isSummariseFunction = map->isSummariseFunction();
-	klee_message("Analysed: %s summarise: %s", f->getName().data(),
-	        isSummariseFunction ? "True" : "False");
+        const MemoryAccessPass::MemoryAccessInstVisitor * visitor = summaries.getVisitor(f);
+        bool isSummariseFunction = visitor->isSummariseFunction();
+        klee_message("Analysed: %s summarise: %s", f->getName().data(),
+                isSummariseFunction ? "True" : "False");
         if (ExecutionStateReplayState_Replay == state.isInReplay()) {
           state.pauseStack.push_back(pauseStackNo++);
           state.nextIsInReplay = isSummariseFunction ?
@@ -2871,23 +2866,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   }
 }
 
-const MemoryAccessPass::MemoryAccess * Executor::getSummary(Function * f) {
-  std::map<llvm::Function *, MemoryAccessPass::MemoryAccess*>::iterator
-          map_it = summaries.find(f);
-  if (map_it != summaries.end()) {
-    return map_it->second;
-  }
-  MemoryAccessPass::MemoryAccess * map = new MemoryAccessPass::MemoryAccess();
-  klee_message("Analysing: %s", f->getName().data());
-  map->runOnFunction(*f);
-  std::string s;
-  llvm::raw_string_ostream rso(s);
-  map->print(rso, f->getParent());
-  klee_message("Analysis: %s", rso.str().c_str());
-  summaries[f] = map;
-  return map;
-}
-
 void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, Function * f) {
   ref<Expr> value;
   bool hasReturnValue = createSymbolicReturnValue(f, value);
@@ -2895,8 +2873,8 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
     bindLocal(ki, state, value);
     state.LATESTResults().push_back(value);
   }
-  const MemoryAccessPass::MemoryAccess * map = getSummary(f);
-  const MemoryAccessPass::MemoryAccessData * data = map->getSummaryData();
+  const MemoryAccessPass::MemoryAccessInstVisitor * visitor = summaries.getVisitor(f);
+  const MemoryAccessPass::MemoryAccessData * data = visitor->functionData;
   // Globals
   const MemoryAccessPass::StoreBaseToValueMap & globalStores = data->globalStores;
   for (MemoryAccessPass::StoreBaseToValueMap::const_iterator it = globalStores.begin(),
@@ -2962,8 +2940,8 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, ref<Expr> & result,
     f = invokeInstruction->getCalledFunction();
   }
   assert(f && "Get function failed");
-  const MemoryAccessPass::MemoryAccess * map = getSummary(f);
-  const MemoryAccessPass::MemoryAccessData * data = map->getSummaryData();
+  const MemoryAccessPass::MemoryAccessInstVisitor * visitor = summaries.getVisitor(f);
+  const MemoryAccessPass::MemoryAccessData * data = visitor->functionData;
   // Globals
   const MemoryAccessPass::StoreBaseToValueMap & globalStores = data->globalStores;
   for (MemoryAccessPass::StoreBaseToValueMap::const_iterator it = globalStores.begin(),
