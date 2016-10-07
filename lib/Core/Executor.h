@@ -18,6 +18,7 @@
 #include "klee/ExecutionState.h"
 #include "klee/Interpreter.h"
 #include "klee/Internal/Module/Cell.h"
+#include "klee/Internal/Module/InstructionInfoTable.h"
 #include "klee/Internal/Module/KInstruction.h"
 #include "klee/Internal/Module/KModule.h"
 #include "klee/util/ArrayCache.h"
@@ -559,6 +560,14 @@ public:
   Expr::Width getWidthForPointedValuePointer(const llvm::Value *pointer) const;
 };
   
+inline llvm::raw_ostream & operator<<(llvm::raw_ostream & o, const klee::InstructionInfo & ii) {
+	o << "(id: " << ii.id <<
+		" file: " << ii.file <<
+		" line: " << ii.line <<
+		" assemblyLine: " << ii.assemblyLine << ")";
+	return o;
+}
+
 } // End klee namespace
 
 #endif
