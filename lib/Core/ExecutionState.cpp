@@ -405,8 +405,40 @@ ExecutionStateReplayState & ExecutionState::isInReplay() {
   return sf.isInReplay;
 }
 
-ExecutionStateReplayState & ExecutionState::isInReplaySkippingSkipped() {
-  return getTopLATESTStackFrame().isInReplay;
+bool ExecutionState::isFirstLATESTPass() {
+  for (stack_ty::reverse_iterator it = stack.rbegin(),
+                          ie = stack.rend();
+          it != ie; it++) {
+    switch (it->isInReplay) {
+      case ExecutionStateReplayState_FirstPass:
+        return true;
+      case ExecutionStateReplayState_Replay:
+        return false;
+      case ExecutionStateReplayState_SkipLATEST:
+        break; // Break out of switch
+      case ExecutionStateReplayState_RecursiveNoLATEST:
+        return false;
+    }
+  }
+  assert(false && "Should never reach here");
+}
+
+bool ExecutionState::isInReplaySkippingSkipped() {
+  for (stack_ty::reverse_iterator it = stack.rbegin(),
+                          ie = stack.rend();
+          it != ie; it++) {
+    switch (it->isInReplay) {
+      case ExecutionStateReplayState_FirstPass:
+        return false;
+      case ExecutionStateReplayState_Replay:
+        return true;
+      case ExecutionStateReplayState_SkipLATEST:
+        break; // Break out of switch
+      case ExecutionStateReplayState_RecursiveNoLATEST:
+        return false;
+    }
+  }
+  assert(false && "Should never reach here");
 }
 
 StackFrame & ExecutionState::getTopLATESTStackFrame() {
@@ -414,10 +446,15 @@ StackFrame & ExecutionState::getTopLATESTStackFrame() {
   for (stack_ty::reverse_iterator it = stack.rbegin(),
                           ie = stack.rend();
           it != ie; it++) {
-    if (ExecutionStateReplayState_SkipLATEST == it->isInReplay) {
-      continue;
+    if (ExecutionStateReplayState_FirstPass == it->isInReplay) {
+      return *it;
     }
-    return *it;
+    if (ExecutionStateReplayState_Replay == it->isInReplay) {
+      return *it;
+    }
+    if (ExecutionStateReplayState_RecursiveNoLATEST == it->isInReplay) {
+      assert(false && "Should never reach here");
+    }
   }
   assert(false && "No non-skipped stack frames.");
 }
@@ -428,7 +465,8 @@ StackFrame * ExecutionState::getSecondTopLATESTStackFrame() {
   for (stack_ty::reverse_iterator it = stack.rbegin(),
                           ie = stack.rend();
           it != ie; it++) {
-    if (ExecutionStateReplayState_SkipLATEST == it->isInReplay) {
+    if (!((ExecutionStateReplayState_FirstPass == it->isInReplay) ||
+          (ExecutionStateReplayState_Replay == it->isInReplay))) {
       continue;
     }
     if (first) {

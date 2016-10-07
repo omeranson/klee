@@ -738,8 +738,7 @@ void Executor::branch(ExecutionState &state,
   unsigned N = conditions.size();
   assert(N);
 
-  if (UseLATESTAlgorithm &&
-        (state.isInReplaySkippingSkipped() == ExecutionStateReplayState_Replay)) {
+  if (UseLATESTAlgorithm && (state.isInReplaySkippingSkipped())) {
     unsigned count = 0;
     std::vector<bool> & path_latest = state.path_latest();
     unsigned & replayPosition = state.replayPosition();
@@ -844,8 +843,7 @@ void Executor::branch(ExecutionState &state,
 }
 
 bool Executor::isReplayPath(ExecutionState &state) {
-  return ((replayPath != 0) ||
-  		(state.isInReplaySkippingSkipped() == ExecutionStateReplayState_Replay));
+  return ((replayPath != 0) || (state.isInReplaySkippingSkipped()));
 }
 
 bool Executor::getReplayPathBranch(ExecutionState & state) {
@@ -1004,7 +1002,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
-    if (UseLATESTAlgorithm) {
+    if (UseLATESTAlgorithm && current.isFirstLATESTPass()) {
       current.path_latest().push_back(true);
     }
     return StatePair(&current, 0);
@@ -1015,7 +1013,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
       }
     }
 
-    if (UseLATESTAlgorithm) {
+    if (UseLATESTAlgorithm && current.isFirstLATESTPass()) {
       current.path_latest().push_back(false);
     }
     return StatePair(0, &current);
@@ -1084,7 +1082,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     addConstraint(*trueState, condition);
     addConstraint(*falseState, Expr::createIsZero(condition));
 
-    if (UseLATESTAlgorithm) { // Won't get here on replay
+    if (UseLATESTAlgorithm && current.isFirstLATESTPass()) { // Won't get here on replay
       trueState->path_latest().push_back(true);
       falseState->path_latest().push_back(false);
     }
@@ -1749,12 +1747,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 	}
 	// 2. replay the function
 	statePathFeasible(state, false, 0, 0);
-        std::vector<klee::StackFrame>::reverse_iterator sit = state.stack.rbegin();
-	++sit;
-        if (sit != state.stack.rend()) {
-          StackFrame &sf = *sit;
-	  sf.resultsPosition = 0;
-        }
+	StackFrame *sf = state.getSecondTopLATESTStackFrame();
+	if (sf) {
+	  sf->resultsPosition = 0;
+	}
 	break; // We'll come here again when isInReplay is 'Replay'
       } else if (state.isInReplay() == ExecutionStateReplayState_Replay) {
 	// 3. verify the path is still feasible
@@ -3035,6 +3031,15 @@ bool Executor::LATESTIsExecuteFunctionAnyway(ExecutionState &state, Function *f)
     return true;
   }
   if (strcmp(name, "__assert_fail") == 0) {
+    return true;
+  }
+  if (strcmp(name, "malloc") == 0) {
+    return true;
+  }
+  if (strcmp(name, "realloc") == 0) {
+    return true;
+  }
+  if (strcmp(name, "free") == 0) {
     return true;
   }
   return false;

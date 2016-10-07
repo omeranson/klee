@@ -220,7 +220,8 @@ public:
   void dumpStack(llvm::raw_ostream &out) const;
 
   ExecutionStateReplayState & isInReplay();
-  ExecutionStateReplayState & isInReplaySkippingSkipped();
+  bool isInReplaySkippingSkipped();
+  bool isFirstLATESTPass();
   StackFrame & getTopLATESTStackFrame();
   StackFrame * getSecondTopLATESTStackFrame();
   std::vector<bool> & path_latest();
