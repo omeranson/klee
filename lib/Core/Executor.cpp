@@ -1082,7 +1082,7 @@ Executor::fork(ExecutionState &current, ref<Expr> condition, bool isInternal) {
     addConstraint(*trueState, condition);
     addConstraint(*falseState, Expr::createIsZero(condition));
 
-    if (UseLATESTAlgorithm && current.isFirstLATESTPass()) { // Won't get here on replay
+    if (UseLATESTAlgorithm && current.isFirstLATESTPass()) {
       trueState->path_latest().push_back(true);
       falseState->path_latest().push_back(false);
     }
@@ -2004,9 +2004,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       break;
     }
     // LATEST algorithm
-    // Replace with call to klee_int. However, if already begins with klee, is
-    // __assert_fail, exit, _exit, etc., keep the original execution, incl.
-    // nested calls
     if (UseLATESTAlgorithm) {
       bool execAnyway = LATESTIsExecuteFunctionAnyway(state, f);
       if (!execAnyway) {
@@ -2115,11 +2112,14 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
             executeCall(*res.first, ki, f, arguments);
           } else {
             if (!hasInvalid) {
-              terminateStateOnExecError(state, "invalid function pointer");
+              terminateStateOnExecError(*res.first, "invalid function pointer");
               hasInvalid = true;
-            }
+            } else {
+	      // Silently terminate
+	      terminateState(*res.first);
+	    }
           }
-        }
+	}
 
         first = false;
         free = res.second;
@@ -3686,12 +3686,14 @@ void Executor::terminateStateOnError(ExecutionState &state,
       suffix = suffix_buf.c_str();
     }
 
-    if (UseLATESTAlgorithm) {
+    if (UseLATESTAlgorithm && state.isFirstLATESTPass()) {
+      if (ii.file != "") {
+        klee_message("Possible ERROR: %s:%d: %s", ii.file.c_str(), ii.line, message.c_str());
+      } else {
+        klee_message("Possible ERROR: (location information missing) %s", message.c_str());
+      }
       state.replayErrorMessage = key;
       state.pauseOnRet = false;
-      //state.pauseStack.clear();
-      //state.pauseStack.push_back(pauseStackNo++);
-      //printPauseStack(state, "For state termed on error.");
       statePathFeasible(state, true, msg.str().c_str(), suffix);
     } else {
       interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
