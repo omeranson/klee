@@ -13,7 +13,7 @@ CC=musl-clang
 CXX=musl-clang++
 LD=musl-clang
 
-ALL=${BASE} ${BASE}.bc
+ALL=${BASE} ${BASE}.bc ${BASE}.ll
 
 all: ${ALL}
 
@@ -28,6 +28,9 @@ ${BASE}: ${OBJS}
 
 %.bc: %
 	extract-bc $^
+
+%.ll: %.bc
+	llvm-dis $^ > $@
 
 clean:
 	rm -f ${ALL}
