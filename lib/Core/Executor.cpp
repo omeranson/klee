@@ -2894,7 +2894,9 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
     const llvm::Constant * valueAsConstant = dyn_cast<Constant>(value);
     assert(valueAsConstant && "Cast failed");
     ref<Expr> address = evalConstant(valueAsConstant);
-    executeMemoryOperation(state, true, address, symbolicValue, 0);
+    if (!executeMemoryOperation(state, true, address, symbolicValue, 0)) {
+      return;
+    }
   }
   // Pointers passed as argument
   const MemoryAccessPass::ValueSet & argumentStores = data->argumentStores;
@@ -2907,7 +2909,9 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
     createSymbolicValue(width, value->getName(), symbolicValue);
     state.LATESTResults().push_back(symbolicValue);
     ref<Expr> address = evalAddress(state, value);
-    executeMemoryOperation(state, true, address, symbolicValue, 0);
+    if (!executeMemoryOperation(state, true, address, symbolicValue, 0)) {
+      return;
+    }
   }
 }
 
@@ -4021,7 +4025,7 @@ void Executor::resolveExact(ExecutionState &state,
 
 // TODO(oanson) Unify this method with executeMemoryOperation.
 // They are very similar.
-void Executor::getExpressionFromMemory(ExecutionState &state,
+bool Executor::getExpressionFromMemory(ExecutionState &state,
                                       ref<Expr> & address, Expr::Width type,
                                       ref<Expr> & result) {
   unsigned bytes = Expr::getMinBytesForWidth(type);
@@ -4059,7 +4063,7 @@ void Executor::getExpressionFromMemory(ExecutionState &state,
     if (!success) {
       state.pc = state.prevPC;
       terminateStateEarly(state, "Query timed out (bounds check).");
-      return;
+      return false;
     }
 
     if (inBounds) {
@@ -4069,9 +4073,9 @@ void Executor::getExpressionFromMemory(ExecutionState &state,
       if (interpreterOpts.MakeConcreteSymbolic)
         result = replaceReadWithSymbolic(state, result);
       
-      return;
+      return true;
     }
-  } 
+  }
 
   // we are on an error path (no resolution, multiple resolution, one
   // resolution with out of bounds)
@@ -4111,10 +4115,12 @@ void Executor::getExpressionFromMemory(ExecutionState &state,
       terminateStateOnError(*unbound, "memory error: out of bound pointer", Ptr,
                             NULL, getAddressInfo(*unbound, address));
     }
+    return false;
   }
+  return true;
 }
 
-void Executor::executeMemoryOperation(ExecutionState &state,
+bool Executor::executeMemoryOperation(ExecutionState &state,
                                       bool isWrite,
                                       ref<Expr> address,
                                       ref<Expr> value /* undef if read */,
@@ -4158,7 +4164,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
     if (!success) {
       state.pc = state.prevPC;
       terminateStateEarly(state, "Query timed out (bounds check).");
-      return;
+      return false;
     }
 
     if (inBounds) {
@@ -4167,6 +4173,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
         if (os->readOnly) {
           terminateStateOnError(state, "memory error: object read only",
                                 ReadOnly);
+	  return false;
         } else {
           ObjectState *wos = state.addressSpace.getWriteable(mo, os);
           wos->write(offset, value);
@@ -4180,7 +4187,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
         bindLocal(target, state, result);
       }
 
-      return;
+      return true;
     }
   } 
 
@@ -4210,6 +4217,7 @@ void Executor::executeMemoryOperation(ExecutionState &state,
         if (os->readOnly) {
           terminateStateOnError(*bound, "memory error: object read only",
                                 ReadOnly);
+	  return false;
         } else {
           ObjectState *wos = bound->addressSpace.getWriteable(mo, os);
           wos->write(mo->getOffsetExpr(address), value);
@@ -4233,7 +4241,9 @@ void Executor::executeMemoryOperation(ExecutionState &state,
       terminateStateOnError(*unbound, "memory error: out of bound pointer", Ptr,
                             NULL, getAddressInfo(*unbound, address));
     }
+    return false;
   }
+  return true;
 }
 
 void Executor::executeMakeSymbolic(ExecutionState &state, 

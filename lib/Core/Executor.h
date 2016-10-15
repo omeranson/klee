@@ -317,7 +317,7 @@ private:
                    llvm::Function *f,
                    std::vector< ref<Expr> > &arguments);
                    
-  void getExpressionFromMemory(ExecutionState &state,
+  bool getExpressionFromMemory(ExecutionState &state,
                                       ref<Expr> & value,
 				      Expr::Width type,
                                       ref<Expr> & result);
@@ -325,7 +325,7 @@ private:
   bool isForcedExternal(std::string & name);
   // do address resolution / object binding / out of bounds checking
   // and perform the operation
-  void executeMemoryOperation(ExecutionState &state,
+  bool executeMemoryOperation(ExecutionState &state,
                               bool isWrite,
                               ref<Expr> address,
                               ref<Expr> value /* undef if read */,
