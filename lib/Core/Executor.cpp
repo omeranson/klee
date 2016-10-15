@@ -483,6 +483,7 @@ const Module *Executor::setModule(llvm::Module *module,
 }
 
 Executor::~Executor() {
+  summaries.clear();
   delete memory;
   delete externalDispatcher;
   if (processTree)
