@@ -2881,11 +2881,11 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
   const MemoryAccessPass::MemoryAccessInstVisitor * visitor = summaries.getVisitor(f);
   const MemoryAccessPass::MemoryAccessData * data = visitor->functionData;
   // Globals
-  const MemoryAccessPass::StoreBaseToValueMap & globalStores = data->globalStores;
-  for (MemoryAccessPass::StoreBaseToValueMap::const_iterator it = globalStores.begin(),
-								ie = globalStores.end();
+  const MemoryAccessPass::ValueSet & globalStores = data->globalStores;
+  for (MemoryAccessPass::ValueSet::const_iterator it = globalStores.begin(),
+							ie = globalStores.end();
           it != ie; it++) {
-    const llvm::Value * value = it->first;
+    const llvm::Value * value = *it;
     Expr::Width width = getWidthForPointedValuePointer(value);
     ref<Expr> symbolicValue;
     createSymbolicValue(width, value->getName(), symbolicValue);
@@ -2896,11 +2896,11 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
     executeMemoryOperation(state, true, address, symbolicValue, 0);
   }
   // Pointers passed as argument
-  const MemoryAccessPass::StoreBaseToValueMap & argumentStores = data->argumentStores;
-  for (MemoryAccessPass::StoreBaseToValueMap::const_iterator it = argumentStores.begin(),
-								ie = argumentStores.end();
+  const MemoryAccessPass::ValueSet & argumentStores = data->argumentStores;
+  for (MemoryAccessPass::ValueSet::const_iterator it = argumentStores.begin(),
+							ie = argumentStores.end();
           it != ie; it++) {
-    const llvm::Value * value = it->first;
+    const llvm::Value * value = *it;
     Expr::Width width = getWidthForPointedValuePointer(value);
     ref<Expr> symbolicValue;
     createSymbolicValue(width, value->getName(), symbolicValue);
@@ -2948,11 +2948,11 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, ref<Expr> & result,
   const MemoryAccessPass::MemoryAccessInstVisitor * visitor = summaries.getVisitor(f);
   const MemoryAccessPass::MemoryAccessData * data = visitor->functionData;
   // Globals
-  const MemoryAccessPass::StoreBaseToValueMap & globalStores = data->globalStores;
-  for (MemoryAccessPass::StoreBaseToValueMap::const_iterator it = globalStores.begin(),
-								ie = globalStores.end();
+  const MemoryAccessPass::ValueSet & globalStores = data->globalStores;
+  for (MemoryAccessPass::ValueSet::const_iterator it = globalStores.begin(),
+							ie = globalStores.end();
           it != ie; it++) {
-    const llvm::Value * value = it->first;
+    const llvm::Value * value = *it;
     ref<Expr> symbolicValue = sf->results[sf->resultsPosition++];
     ref<Expr> evaluatedValue;
     const llvm::Constant * valueAsConstant = dyn_cast<Constant>(value);
@@ -2974,13 +2974,16 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, ref<Expr> & result,
     }
   }
   // Pointers passed as argument
-  const MemoryAccessPass::StoreBaseToValueMap & argumentStores = data->argumentStores;
-  for (MemoryAccessPass::StoreBaseToValueMap::const_iterator it = argumentStores.begin(),
+  const MemoryAccessPass::ValueSet & argumentStores = data->argumentStores;
+  for (MemoryAccessPass::ValueSet::const_iterator it = argumentStores.begin(),
 								ie = argumentStores.end();
           it != ie; it++) {
-    const llvm::Value * value = it->first;
+    const llvm::Value * value = *it;
     ref<Expr> symbolicValue = sf->results[sf->resultsPosition++];
     ref<Expr> address = evalAddress(state, value);
+    if (address.isNull()) {
+      continue;
+    }
     ref<Expr> evaluatedValue;
     Expr::Width width = getWidthForPointedValuePointer(value);
     getExpressionFromMemory(state, address, width, evaluatedValue);
