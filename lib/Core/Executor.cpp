@@ -1743,7 +1743,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     if (UseLATESTAlgorithm) {
       if (state.isInReplay() == ExecutionStateReplayState_FirstPass) {
 	// 1. Verify the path is feasible
-	if (!verifyPathFeasibility(state, result, !isVoidReturn, false)) {
+	if (!verifyPathFeasibility(state, kcaller, result, !isVoidReturn, false)) {
 	  break;
 	}
 	// 2. replay the function
@@ -1755,7 +1755,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 	break; // We'll come here again when isInReplay is 'Replay'
       } else if (state.isInReplay() == ExecutionStateReplayState_Replay) {
 	// 3. verify the path is still feasible
-	if (!verifyPathFeasibility(state, result, !isVoidReturn, true)) {
+	if (!verifyPathFeasibility(state, kcaller, result, !isVoidReturn, true)) {
 	  break;
 	}
 	// 4. Pause others. Resume upon replay failed.
@@ -2904,18 +2904,25 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
 							ie = argumentStores.end();
           it != ie; it++) {
     const llvm::Value * value = *it;
+    ref<Expr> address = evalAddress(state, ki, value);
+    if (address.isNull()) {
+      std::string s;
+      llvm::raw_string_ostream rso(s);
+      rso << *value;
+      klee_warning("LATEST underestimation: Cannot symbolise write to: %s", rso.str().c_str());
+      continue;
+    }
     Expr::Width width = getWidthForPointedValuePointer(value);
     ref<Expr> symbolicValue;
     createSymbolicValue(width, value->getName(), symbolicValue);
     state.LATESTResults().push_back(symbolicValue);
-    ref<Expr> address = evalAddress(state, value);
     if (!executeMemoryOperation(state, true, address, symbolicValue, 0)) {
       return;
     }
   }
 }
 
-bool Executor::verifyPathFeasibility(ExecutionState & state, ref<Expr> & result, bool hasReturnValue, bool isAddConstraint) {
+bool Executor::verifyPathFeasibility(ExecutionState & state, KInstruction * ki, ref<Expr> & result, bool hasReturnValue, bool isAddConstraint) {
   StackFrame * sf = state.getSecondTopLATESTStackFrame();
   if (!sf) {
     return true;
@@ -2985,7 +2992,7 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, ref<Expr> & result,
           it != ie; it++) {
     const llvm::Value * value = *it;
     ref<Expr> symbolicValue = sf->results[sf->resultsPosition++];
-    ref<Expr> address = evalAddress(state, value);
+    ref<Expr> address = evalAddress(state, ki, value);
     if (address.isNull()) {
       continue;
     }
@@ -3010,13 +3017,51 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, ref<Expr> & result,
   return true;
 }
 
-ref<Expr> Executor::evalAddress(ExecutionState & state, const llvm::Value * value) {
-  assert(llvm::isa<llvm::Argument>(value) && "Only direct argument pointer support (TODO)");
-  const llvm::Argument * argument = llvm::cast<llvm::Argument>(value);
+ref<klee::ConstantExpr> Executor::evalAddressOffset(ExecutionState & state, const llvm::GetElementPtrInst * gepi) {
+  ref<ConstantExpr> base = ConstantExpr::create(0, 1);
+  if (!gepi) {
+    return base;
+  }
+  for (llvm::User::const_op_iterator it = gepi->idx_begin(),
+          ie = gepi->idx_end();
+      it != ie; it++) {
+    const llvm::Value * operand = *it;
+    const llvm::Constant * coperand = llvm::dyn_cast<llvm::Constant>(operand);
+    if (!coperand) {
+      std::string s;
+      llvm::raw_string_ostream rso(s);
+      rso << *operand;
+      klee_warning("LATEST underestimation: Cannot symbolise write to offset: %s", rso.str().c_str());
+      return 0;
+    }
+    ref<ConstantExpr> offset = evalConstant(coperand);
+    base = base->ZExt(offset->getWidth());
+    base = base->Add(offset);
+  }
+  return base;
+}
+
+ref<Expr> Executor::evalAddressBase(ExecutionState & state, KInstruction * ki, const llvm::Argument * argument) {
   unsigned argIndex = argument->getArgNo();
-  StackFrame &sf = state.stack.back();
-  unsigned localsIndex = sf.kf->getArgRegister(argIndex);
-  ref<Expr> result = sf.locals[localsIndex].value;
+  ref<Expr> result = eval(ki, argIndex, state).value;
+  return result;
+}
+
+ref<Expr> Executor::evalAddress(ExecutionState & state, KInstruction * ki, const llvm::Value * value) {
+  const llvm::GetElementPtrInst * gepi = llvm::dyn_cast<llvm::GetElementPtrInst>(value);
+  ref<ConstantExpr> offset = 0;
+  if (gepi) {
+    offset = evalAddressOffset(state, gepi);
+    value = gepi->getPointerOperand();
+  }
+  const llvm::Argument * argument = llvm::dyn_cast<llvm::Argument>(value);
+  if (!argument) {
+    return 0;
+  }
+  ref<Expr> result = evalAddressBase(state, ki, argument);
+  if (!offset.isNull()) {
+    result = AddExpr::create(ZExtExpr::create(result, offset->getWidth()), offset);
+  }
   return result;
 }
 
@@ -3703,6 +3748,10 @@ void Executor::terminateStateOnError(ExecutionState &state,
       state.replayErrorMessage = key;
       state.pauseOnRet = false;
       statePathFeasible(state, true, msg.str().c_str(), suffix);
+      std::string suffix_buf = "LATEST.";
+      suffix_buf += suffix;
+      suffix = suffix_buf.c_str();
+      interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
     } else {
       interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
     }

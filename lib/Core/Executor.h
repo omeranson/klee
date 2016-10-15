@@ -381,7 +381,9 @@ private:
 
   ref<klee::ConstantExpr> evalConstantExpr(const llvm::ConstantExpr *ce);
 
-  ref<Expr> evalAddress(ExecutionState & state, const llvm::Value * value);
+  ref<Expr> evalAddress(ExecutionState & state, KInstruction * ki, const llvm::Value * value);
+  ref<Expr> evalAddressBase(ExecutionState & state, KInstruction * ki, const llvm::Argument * argument);
+  ref<klee::ConstantExpr> evalAddressOffset(ExecutionState & state, const llvm::GetElementPtrInst * gepi);
 
   /// Return a unique constant value for the given expression in the
   /// given state, if it has one (i.e. it provably only has a single
@@ -473,7 +475,7 @@ private:
   void terminateStateOnReplayFailed(ExecutionState & state);
   void terminateStateOnBoringReplay(ExecutionState & state);
   ref<Expr> extendResult(ref<Expr> result, llvm::Instruction *caller);
-  bool verifyPathFeasibility(ExecutionState & state, ref<Expr> & result, bool hasReturnValue, bool isAddConstraint);
+  bool verifyPathFeasibility(ExecutionState & state, KInstruction * ki, ref<Expr> & result, bool hasReturnValue, bool isAddConstraint);
   void createSymbolicValue(Expr::Width width, llvm::StringRef name, ref<Expr> & result);
 
   void pauseState(ExecutionState &state);
