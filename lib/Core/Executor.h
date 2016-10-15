@@ -568,6 +568,26 @@ inline llvm::raw_ostream & operator<<(llvm::raw_ostream & o, const klee::Instruc
 	return o;
 }
 
+template <typename T>
+inline llvm::raw_ostream & operator<<(llvm::raw_ostream & O, const std::vector<T> & s) {
+  O << "{";
+  for (typename std::vector<T>::const_iterator it = s.begin(), ie = s.end(); it != ie; it++) {
+    O << *it << ", ";
+  }
+  O << "}";
+  return O;
+}
+
+template <typename T>
+inline llvm::raw_ostream & operator<<(llvm::raw_ostream & O, const std::set<T> & s) {
+  O << "{";
+  for (typename std::set<T>::const_iterator it = s.begin(), ie = s.end(); it != ie; it++) {
+    O << *it << ", ";
+  }
+  O << "}";
+  return O;
+}
+
 } // End klee namespace
 
 #endif
