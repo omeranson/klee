@@ -3748,10 +3748,6 @@ void Executor::terminateStateOnError(ExecutionState &state,
       state.replayErrorMessage = key;
       state.pauseOnRet = false;
       statePathFeasible(state, true, msg.str().c_str(), suffix);
-      std::string suffix_buf = "LATEST.";
-      suffix_buf += suffix;
-      suffix = suffix_buf.c_str();
-      interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
     } else {
       interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
     }
