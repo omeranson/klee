@@ -2991,7 +2991,6 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, KInstruction * ki, 
 								ie = argumentStores.end();
           it != ie; it++) {
     const llvm::Value * value = *it;
-    ref<Expr> symbolicValue = sf->results[sf->resultsPosition++];
     ref<Expr> address = evalAddress(state, ki, value);
     if (address.isNull()) {
       continue;
@@ -3000,6 +2999,7 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, KInstruction * ki, 
     Expr::Width width = getWidthForPointedValuePointer(value);
     getExpressionFromMemory(state, address, width, evaluatedValue);
 
+    ref<Expr> symbolicValue = sf->results[sf->resultsPosition++];
     ref<Expr> match = EqExpr::create(symbolicValue, evaluatedValue);
     bool res;
     bool success = solver->mayBeTrue(state, match, res);
