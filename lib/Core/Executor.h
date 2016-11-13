@@ -381,7 +381,9 @@ private:
 
   ref<klee::ConstantExpr> evalConstantExpr(const llvm::ConstantExpr *ce);
 
-  ref<Expr> evalAddress(ExecutionState & state, KInstruction * ki, const llvm::Value * value);
+  ref<Expr> evalAddress(ExecutionState & state,
+  		const MemoryAccessPass::MemoryAccessData * data,
+		KInstruction * ki, const llvm::Value * value);
   ref<Expr> evalAddressBase(ExecutionState & state, KInstruction * ki, const llvm::Argument * argument);
   ref<klee::ConstantExpr> evalAddressOffset(ExecutionState & state, const llvm::GetElementPtrInst * gepi);
 

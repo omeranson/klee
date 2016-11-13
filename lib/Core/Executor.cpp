@@ -2904,7 +2904,7 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
 							ie = argumentStores.end();
           it != ie; it++) {
     const llvm::Value * value = *it;
-    ref<Expr> address = evalAddress(state, ki, value);
+    ref<Expr> address = evalAddress(state, data, ki, value);
     if (address.isNull()) {
       std::string s;
       llvm::raw_string_ostream rso(s);
@@ -2991,7 +2991,7 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, KInstruction * ki, 
 								ie = argumentStores.end();
           it != ie; it++) {
     const llvm::Value * value = *it;
-    ref<Expr> address = evalAddress(state, ki, value);
+    ref<Expr> address = evalAddress(state, data, ki, value);
     if (address.isNull()) {
       continue;
     }
@@ -3047,12 +3047,25 @@ ref<Expr> Executor::evalAddressBase(ExecutionState & state, KInstruction * ki, c
   return result;
 }
 
-ref<Expr> Executor::evalAddress(ExecutionState & state, KInstruction * ki, const llvm::Value * value) {
+ref<Expr> Executor::evalAddress(ExecutionState & state,
+		const MemoryAccessPass::MemoryAccessData * data,
+		KInstruction * ki, const llvm::Value * value) {
   const llvm::GetElementPtrInst * gepi = llvm::dyn_cast<llvm::GetElementPtrInst>(value);
   ref<ConstantExpr> offset = 0;
   if (gepi) {
     offset = evalAddressOffset(state, gepi);
     value = gepi->getPointerOperand();
+  }
+  const llvm::LoadInst * li = llvm::dyn_cast<llvm::LoadInst>(value);
+  if (li) {
+    const llvm::Value * pointer = li->getPointerOperand();
+    MemoryAccessPass::StoreBaseToValueMap::const_iterator it = data->stores.find(pointer);
+    if (it != data->stores.end()) {
+      if (it->second.isTop()) {
+        return 0;
+      }
+      value = it->second.value;
+    }
   }
   const llvm::Argument * argument = llvm::dyn_cast<llvm::Argument>(value);
   if (!argument) {
