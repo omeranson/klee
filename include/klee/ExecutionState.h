@@ -121,6 +121,7 @@ public:
 
   /// @brief Address space used by this state (e.g. Global and Heap)
   AddressSpace addressSpace;
+  AddressSpace entryAddressSpace;
 
   /// @brief Constraints collected so far
   ConstraintManager constraints;

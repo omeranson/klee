@@ -116,6 +116,7 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     incomingBBIndex(state.incomingBBIndex),
 
     addressSpace(state.addressSpace),
+    entryAddressSpace(state.entryAddressSpace),
     constraints(state.constraints),
 
     queryCost(state.queryCost),

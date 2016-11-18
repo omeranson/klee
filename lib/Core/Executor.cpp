@@ -2014,6 +2014,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
           state.pauseStack.push_back(pauseStackNo++);
           state.nextIsInReplay = isSummariseFunction ?
 	          ExecutionStateReplayState_FirstPass : ExecutionStateReplayState_SkipLATEST;
+	  state.entryAddressSpace = state.addressSpace;
         } else {
 	  // Here we classify. If classification says function is too complex,
 	  // we symbolically execute (have executeCall set isInReplay to
@@ -3302,6 +3303,7 @@ void Executor::terminatePausedStates() {
 void Executor::run(ExecutionState &initialState) {
   assert((!(usingSeeds && UseLATESTAlgorithm)) && "replay files and LATEST algorithm cannot be used at the same time");
   bindModuleConstants();
+  initialState.entryAddressSpace = initialState.addressSpace;
 
   // Delay init till now so that ticks don't accrue during
   // optimization and such.
@@ -3664,6 +3666,7 @@ void Executor::statePathFeasible(ExecutionState & state, bool isFork,
   if (suffix) {
     clone->suffix = suffix;
   }
+  clone->addressSpace = state.entryAddressSpace;
 }
 
 void Executor::terminateStateOnReplayDone(ExecutionState & state) {
