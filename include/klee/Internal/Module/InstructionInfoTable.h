@@ -14,6 +14,8 @@
 #include <string>
 #include <set>
 
+#include "llvm/Support/raw_ostream.h"
+
 namespace llvm {
   class Function;
   class Instruction;
@@ -66,6 +68,13 @@ namespace klee {
     const InstructionInfo &getInfo(const llvm::Instruction*) const;
     const InstructionInfo &getFunctionInfo(const llvm::Function*) const;
   };
+  inline llvm::raw_ostream & operator<<(llvm::raw_ostream & o, const klee::InstructionInfo & ii) {
+	o << "(id: " << ii.id <<
+		" file: " << ii.file <<
+		" line: " << ii.line <<
+		" assemblyLine: " << ii.assemblyLine << ")";
+	return o;
+  }
 
 }
 

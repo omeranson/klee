@@ -564,14 +564,6 @@ public:
   Expr::Width getWidthForPointedValuePointer(const llvm::Value *pointer) const;
 };
   
-inline llvm::raw_ostream & operator<<(llvm::raw_ostream & o, const klee::InstructionInfo & ii) {
-	o << "(id: " << ii.id <<
-		" file: " << ii.file <<
-		" line: " << ii.line <<
-		" assemblyLine: " << ii.assemblyLine << ")";
-	return o;
-}
-
 template <typename T>
 inline llvm::raw_ostream & operator<<(llvm::raw_ostream & O, const std::vector<T> & s) {
   O << "{";
