@@ -1758,16 +1758,8 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 	if (!verifyPathFeasibility(state, kcaller, result, !isVoidReturn, true)) {
 	  break;
 	}
-	// 4. Pause others. Resume upon replay failed.
-	if (state.coveredNew) {
-	  state.pauseOnRet = false;
-	}
-	if (state.pauseOnRet) {
-	  state.pauseOnRet = false;
-	  pauseState(state);
-	  break;
-	}
-	pauseOtherStates(state);
+	// 5. Pause others. Resume upon replay failed.
+	//pauseOtherStates(state);
 	state.pauseOnRet = false;
 
 	// 5. continue
@@ -3405,12 +3397,12 @@ void Executor::run(ExecutionState &initialState) {
 
   while (!states.empty() && !haltExecution) {
     ExecutionState &state = searcher->selectState();
-//    klee_message("Executing state: %p", (void*)&state);
-    assert((pausedStates.count(&state) == 0) && "Paused state returned by searcher");
-//    if (pausedStates.count(&state) != 0) {
-//      klee_message("It's paused. Skipping");
-//      continue;
-//    }
+//    assert((pausedStates.count(&state) == 0) && "Paused state returned by searcher");
+    if (pausedStates.count(&state) != 0) {
+      //klee_message("It's paused. Skipping");
+      continue;
+    }
+    //klee_message("Executing state: %p", (void*)&state);
     KInstruction *ki = state.pc;
     stepInstruction(state);
 
@@ -3701,7 +3693,7 @@ void Executor::terminateStateOnReplayDone(ExecutionState & state) {
 }
 
 void Executor::terminateStateOnReplayFailed(ExecutionState & state) {
-      resumeOtherStates(state);
+      //resumeOtherStates(state);
       if (LATESTProcessInfeasibleCases) {
         std::stringstream msg_ss;
         msg_ss << "State has infeasible path\n" << state.message;
