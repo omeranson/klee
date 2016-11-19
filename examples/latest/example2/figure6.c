@@ -8,7 +8,7 @@
 int global;
 
 int foo(int u) {
-	global = 1;
+	global++;
 	if (u==0) {
 		return 0;
 	} else {
@@ -20,7 +20,7 @@ int main() {
 	global = 0;
 	int y = klee_int("y");
 	int x = foo(y);
-	if ((global == 0) && (x == 0)) {
+	if ((global == 1) && (x == 0)) {
 		__assert_fail("Success", __FILE__, __LINE__, __func__);
 	}
 }
