@@ -2922,6 +2922,10 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
     createSymbolicValue(width, value->getName(), symbolicValue);
     result.arguments.push_back(symbolicValue);
     if (!executeMemoryOperation(state, true, address, symbolicValue, 0)) {
+      std::string s;
+      llvm::raw_string_ostream rso(s);
+      rso << "Failed to executeMemoryOperation: " << address << " <- " << symbolicValue;
+      klee_message("%s", rso.str().c_str());
       return;
     }
   }
@@ -3006,7 +3010,13 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, KInstruction * ki, 
     }
     ref<Expr> evaluatedValue;
     Expr::Width width = getWidthForPointedValuePointer(value);
-    getExpressionFromMemory(state, address, width, evaluatedValue);
+    if (!getExpressionFromMemory(state, address, width, evaluatedValue)) {
+      std::string s;
+      llvm::raw_string_ostream rso(s);
+      rso << "Failed to getExpressionFromMemory: " << address;
+      klee_message("%s", rso.str().c_str());
+      continue;
+    }
 
     ref<Expr> symbolicValue = results.arguments[argumentIdx++];
     ref<Expr> match = EqExpr::create(symbolicValue, evaluatedValue);
