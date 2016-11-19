@@ -44,6 +44,15 @@ typedef enum {
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const MemoryMap &mm);
 
+/// A class holding the summary results of a summarised call. This includes
+/// return values, arguments, globals, heap, etc.
+struct SummaryResults {
+  ref<Expr> returnValue;
+  std::vector< ref<Expr> > arguments;
+  // TODO(oanson) Maybe make as a map?
+  std::vector< ref<Expr> > globals;
+};
+
 struct StackFrame {
   KInstIterator caller;
   KFunction *kf;
@@ -78,7 +87,7 @@ struct StackFrame {
 
   /// @brief results A vector of the return values of functions called from
   /// this function
-  std::vector<ref<Expr> > results;
+  std::vector<SummaryResults> results;
 
   /// @brief resultsPosition The position of the result of the next function
   /// that will be called.
@@ -227,7 +236,7 @@ public:
   StackFrame * getSecondTopLATESTStackFrame();
   std::vector<bool> & path_latest();
   unsigned & replayPosition();
-  std::vector<ref<Expr> > & LATESTResults();
+  std::vector< SummaryResults > & LATESTResults();
 };
 }
 

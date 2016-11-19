@@ -2874,11 +2874,14 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 }
 
 void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, Function * f) {
+  std::vector< SummaryResults > & results = state.LATESTResults();
+  results.resize(results.size()+1);
+  SummaryResults & result = results.back();
   ref<Expr> value;
   bool hasReturnValue = createSymbolicReturnValue(ki->inst, f, value);
   if (hasReturnValue) {
     bindLocal(ki, state, value);
-    state.LATESTResults().push_back(value);
+    result.returnValue = value;
   }
   const MemoryAccessPass::MemoryAccessInstVisitor * visitor = summaries.getVisitor(f);
   const MemoryAccessPass::MemoryAccessData * data = visitor->functionData;
@@ -2891,7 +2894,7 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
     Expr::Width width = getWidthForPointedValuePointer(value);
     ref<Expr> symbolicValue;
     createSymbolicValue(width, value->getName(), symbolicValue);
-    state.LATESTResults().push_back(symbolicValue);
+    result.globals.push_back(symbolicValue);
     const llvm::Constant * valueAsConstant = dyn_cast<Constant>(value);
     assert(valueAsConstant && "Cast failed");
     ref<Expr> address = evalConstant(valueAsConstant);
@@ -2916,7 +2919,7 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
     Expr::Width width = getWidthForPointedValuePointer(value);
     ref<Expr> symbolicValue;
     createSymbolicValue(width, value->getName(), symbolicValue);
-    state.LATESTResults().push_back(symbolicValue);
+    result.arguments.push_back(symbolicValue);
     if (!executeMemoryOperation(state, true, address, symbolicValue, 0)) {
       return;
     }
@@ -2928,8 +2931,9 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, KInstruction * ki, 
   if (!sf) {
     return true;
   }
+  SummaryResults & results = sf->results[sf->resultsPosition++];
   if (hasReturnValue) {
-    ref<Expr> symbolicResult = sf->results[sf->resultsPosition++];
+    ref<Expr> symbolicResult = results.returnValue;
     ref<Expr> match = EqExpr::create(symbolicResult, result);
     bool res;
     bool success = solver->mayBeTrue(state, match, res);
@@ -2962,11 +2966,12 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, KInstruction * ki, 
   const MemoryAccessPass::MemoryAccessData * data = visitor->functionData;
   // Globals
   const MemoryAccessPass::ValueSet & globalStores = data->globalStores;
+  unsigned globalsIdx = 0;
   for (MemoryAccessPass::ValueSet::const_iterator it = globalStores.begin(),
 							ie = globalStores.end();
           it != ie; it++) {
     const llvm::Value * value = *it;
-    ref<Expr> symbolicValue = sf->results[sf->resultsPosition++];
+    ref<Expr> symbolicValue = results.globals[globalsIdx++];
     ref<Expr> evaluatedValue;
     const llvm::Constant * valueAsConstant = dyn_cast<Constant>(value);
     ref<Expr> address = evalConstant(valueAsConstant);
@@ -2988,6 +2993,7 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, KInstruction * ki, 
   }
   // Pointers passed as argument
   const MemoryAccessPass::ValueSet & argumentStores = data->argumentStores;
+  unsigned argumentIdx = 0;
   for (MemoryAccessPass::ValueSet::const_iterator it = argumentStores.begin(),
 								ie = argumentStores.end();
           it != ie; it++) {
@@ -3000,7 +3006,7 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, KInstruction * ki, 
     Expr::Width width = getWidthForPointedValuePointer(value);
     getExpressionFromMemory(state, address, width, evaluatedValue);
 
-    ref<Expr> symbolicValue = sf->results[sf->resultsPosition++];
+    ref<Expr> symbolicValue = results.arguments[argumentIdx++];
     ref<Expr> match = EqExpr::create(symbolicValue, evaluatedValue);
     bool res;
     bool success = solver->mayBeTrue(state, match, res);
