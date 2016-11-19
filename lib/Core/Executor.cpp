@@ -2877,6 +2877,7 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
   std::vector< SummaryResults > & results = state.LATESTResults();
   results.resize(results.size()+1);
   SummaryResults & result = results.back();
+  result.functionName = f->getName();
   ref<Expr> value;
   bool hasReturnValue = createSymbolicReturnValue(ki->inst, f, value);
   if (hasReturnValue) {
@@ -2931,6 +2932,7 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, KInstruction * ki, 
   if (!sf) {
     return true;
   }
+  assert(sf->resultsPosition < sf->results.size() && "Attempting to read out-of-bounds summary result");
   SummaryResults & results = sf->results[sf->resultsPosition++];
   if (hasReturnValue) {
     ref<Expr> symbolicResult = results.returnValue;

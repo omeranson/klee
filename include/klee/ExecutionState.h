@@ -47,6 +47,7 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const MemoryMap &mm);
 /// A class holding the summary results of a summarised call. This includes
 /// return values, arguments, globals, heap, etc.
 struct SummaryResults {
+  std::string functionName;
   ref<Expr> returnValue;
   std::vector< ref<Expr> > arguments;
   // TODO(oanson) Maybe make as a map?

@@ -489,7 +489,7 @@ unsigned & ExecutionState::replayPosition() {
   return sf.replayPosition;
 }
 
-std::vector<ref<Expr> > & ExecutionState::LATESTResults() {
+std::vector< SummaryResults > & ExecutionState::LATESTResults() {
   StackFrame & sf = getTopLATESTStackFrame();
   return sf.results;
 }
