@@ -1888,16 +1888,16 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
       // Iterate through all non-default cases and order them by expressions
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 1)
       for (SwitchInst::CaseIt i = si->case_begin(), e = si->case_end(); i != e;
-           ++i) {
-        ref<Expr> value = evalConstant(i.getCaseValue());
+           ++i)
 #else
-      for (unsigned i = 1, cases = si->getNumCases(); i < cases; ++i) {
-        ref<Expr> value = evalConstant(si->getCaseValue(i));
+      for (unsigned i = 1, cases = si->getNumCases(); i < cases; ++i)
 #endif
-
+      {
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 1)
+        ref<Expr> value = evalConstant(i.getCaseValue());
         BasicBlock *caseSuccessor = i.getCaseSuccessor();
 #else
+        ref<Expr> value = evalConstant(si->getCaseValue(i));
         BasicBlock *caseSuccessor = si->getSuccessor(i);
 #endif
         expressionOrder.insert(std::make_pair(value, caseSuccessor));
