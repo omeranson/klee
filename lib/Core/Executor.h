@@ -477,6 +477,8 @@ private:
   void terminateStateOnReplayFailed(ExecutionState & state);
   void terminateStateOnBoringReplay(ExecutionState & state);
   ref<Expr> extendResult(ref<Expr> result, llvm::Instruction *caller);
+  ref<Expr> getPathFeasibilityCondition(ExecutionState & state, KInstruction * ki,
+		ref<Expr> & result, bool hasReturnValue);
   bool verifyPathFeasibility(ExecutionState & state, KInstruction * ki, ref<Expr> & result, bool hasReturnValue, bool isAddConstraint);
   void createSymbolicValue(Expr::Width width, llvm::StringRef name, ref<Expr> & result);
 

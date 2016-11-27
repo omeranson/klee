@@ -2923,33 +2923,24 @@ void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, 
   }
 }
 
-bool Executor::verifyPathFeasibility(ExecutionState & state, KInstruction * ki, ref<Expr> & result, bool hasReturnValue, bool isAddConstraint) {
+ref<Expr> Executor::getPathFeasibilityCondition(ExecutionState & state, KInstruction * ki,
+		ref<Expr> & result, bool hasReturnValue) {
+  ref<Expr> match = ConstantExpr::alloc(1, Expr::Bool); // True
   StackFrame * sf = state.getSecondTopLATESTStackFrame();
   if (!sf) {
-    return true;
+    return match;
   }
   assert(sf->resultsPosition < sf->results.size() && "Attempting to read out-of-bounds summary result");
   SummaryResults & results = sf->results[sf->resultsPosition++];
   if (hasReturnValue) {
     ref<Expr> symbolicResult = results.returnValue;
-    ref<Expr> match = EqExpr::create(symbolicResult, result);
-    bool res;
-    bool success = solver->mayBeTrue(state, match, res);
-    assert(success && "FIXME: Unhandled solver failure");
-    (void) success;
-    if (!res) {
-      terminateStateOnReplayFailed(state);
-      return false;
-    } else {
-      if (isAddConstraint) {
-          addConstraint(state, match);
-      }
-    }
+    match = AndExpr::create(match,
+                            EqExpr::create(symbolicResult, result));
   }
   KInstIterator kcaller = state.stack.back().caller;
   Instruction *caller = kcaller ? kcaller->inst : 0;
   if (!caller) {
-    return true;
+    return match;
   }
   Function * f = 0;
   if (isa<CallInst>(caller)) {
@@ -2975,19 +2966,8 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, KInstruction * ki, 
     ref<Expr> address = evalConstant(valueAsConstant);
     Expr::Width width = getWidthForPointedValuePointer(value);
     getExpressionFromMemory(state, address, width, evaluatedValue);
-    ref<Expr> match = EqExpr::create(symbolicValue, evaluatedValue);
-    bool res;
-    bool success = solver->mayBeTrue(state, match, res);
-    assert(success && "FIXME: Unhandled solver failure");
-    (void) success;
-    if (!res) {
-      terminateStateOnReplayFailed(state);
-      return false;
-    } else {
-      if (isAddConstraint) {
-          addConstraint(state, match);
-      }
-    }
+    match = AndExpr::create(match,
+                            EqExpr::create(symbolicValue, evaluatedValue));
   }
   // Pointers passed as argument
   const MemoryAccessPass::ValueSet & argumentStores = data->argumentStores;
@@ -3011,18 +2991,25 @@ bool Executor::verifyPathFeasibility(ExecutionState & state, KInstruction * ki, 
     }
 
     ref<Expr> symbolicValue = results.arguments[argumentIdx++];
-    ref<Expr> match = EqExpr::create(symbolicValue, evaluatedValue);
-    bool res;
-    bool success = solver->mayBeTrue(state, match, res);
-    assert(success && "FIXME: Unhandled solver failure");
-    (void) success;
-    if (!res) {
-      terminateStateOnReplayFailed(state);
-      return false;
-    } else {
-      if (isAddConstraint) {
-          addConstraint(state, match);
-      }
+    match = AndExpr::create(match,
+                            EqExpr::create(symbolicValue, evaluatedValue));
+  }
+  return match;
+}
+
+bool Executor::verifyPathFeasibility(ExecutionState & state, KInstruction * ki,
+		ref<Expr> & result, bool hasReturnValue, bool isAddConstraint) {
+  ref<Expr> match = getPathFeasibilityCondition(state, ki, result, hasReturnValue);
+  bool res;
+  bool success = solver->mayBeTrue(state, match, res);
+  assert(success && "FIXME: Unhandled solver failure");
+  (void) success;
+  if (!res) {
+    terminateStateOnReplayFailed(state);
+    return false;
+  } else {
+    if (isAddConstraint) {
+        addConstraint(state, match);
     }
   }
   return true;
