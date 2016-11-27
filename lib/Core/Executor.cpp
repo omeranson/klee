@@ -1754,12 +1754,23 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 	}
 	break; // We'll come here again when isInReplay is 'Replay'
       } else if (state.isInReplay() == ExecutionStateReplayState_Replay) {
+        // 4. Pause others. Resume upon replay failed.
+        if (state.coveredNew) {
+          state.pauseOnRet = false;
+        }
+        if (state.pauseOnRet) {
+          state.pauseOnRet = false;
+          pauseState(state);
+          break;
+        }
+
 	// 3. verify the path is still feasible
 	if (!verifyPathFeasibility(state, kcaller, result, !isVoidReturn, true)) {
+	  // klee_message("LATEST: Path is not feasible in REPLAY");
 	  break;
 	}
 	// 5. Pause others. Resume upon replay failed.
-	//pauseOtherStates(state);
+	pauseOtherStates(state);
 	state.pauseOnRet = false;
 
 	// 5. continue
@@ -3680,7 +3691,7 @@ void Executor::terminateStateOnReplayDone(ExecutionState & state) {
 }
 
 void Executor::terminateStateOnReplayFailed(ExecutionState & state) {
-      //resumeOtherStates(state);
+      resumeOtherStates(state);
       if (LATESTProcessInfeasibleCases) {
         std::stringstream msg_ss;
         msg_ss << "State has infeasible path\n" << state.message;
