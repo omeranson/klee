@@ -138,7 +138,8 @@ ExecutionState::ExecutionState(const ExecutionState& state):
     suffix(state.suffix),
     nextIsInReplay(state.nextIsInReplay),
     pauseStack(state.pauseStack),
-    pauseOnRet(state.pauseOnRet)
+    pauseOnRet(state.pauseOnRet),
+    kernel(state.kernel)
 {
   for (unsigned int i=0; i<symbolics.size(); i++)
     symbolics[i].first->refCount++;

@@ -116,6 +116,9 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_alias_function", handleAliasFunction, false),
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
+  add("__syscall", handleSyscall, true),
+  add("syscall", handleSyscall, true),
+  add("__syscall_cp_asm", handleSyscallCP, true),
 
   // operator delete[](void*)
   add("_ZdaPv", handleDeleteArray, false),
@@ -699,7 +702,12 @@ void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state,
            "invalid number of arguments to klee_make_symbolic");  
     name = readStringAtAddress(state, arguments[2]);
   }
+  handleMakeNamedSymbolic(state, arguments, name);
+}
 
+void SpecialFunctionHandler::handleMakeNamedSymbolic(ExecutionState &state,
+                                std::vector< ref<Expr> > &arguments,
+				std::string name) {
   Executor::ExactResolutionList rl;
   executor.resolveExact(state, arguments[0], rl, "make_symbolic");
   
@@ -730,6 +738,12 @@ void SpecialFunctionHandler::handleMakeSymbolic(ExecutionState &state,
     if (res) {
       executor.executeMakeSymbolic(*s, mo, name);
     } else {      
+      {
+        std::string s;
+	llvm::raw_string_ostream rso(s);
+	rso << "wrong size given to klee_make_symbolic[_name]: GIven: " << arguments[1] << " Expected: " << mo->getSizeExpr();
+	klee_warning("%s", rso.str().c_str());
+      }
       executor.terminateStateOnError(*s, 
                                      "wrong size given to klee_make_symbolic[_name]", 
                                      Executor::User);
@@ -780,4 +794,25 @@ void SpecialFunctionHandler::handleDivRemOverflow(ExecutionState &state,
                                                std::vector<ref<Expr> > &arguments) {
   executor.terminateStateOnError(state, "overflow on division or remainder",
                                  Executor::Overflow);
+}
+
+void SpecialFunctionHandler::handleSyscall(ExecutionState &state,
+                                           KInstruction *target,
+                                           std::vector<ref<Expr> > &arguments) {
+  ExecutionState &syscallFailState = *executor.simpleFork(state);
+  executor.bindLocal(target, syscallFailState,
+                     ConstantExpr::create(-1, Expr::Int64));
+  // TODO(oanson) Set errno to symbolic on syscallFailState
+  // If result isn't -1, branch, and return also -1
+  ref<Expr> result = state.kernel.syscall(executor, state, arguments);
+  if (!result.isNull()) {
+    executor.bindLocal(target, state, result);
+  }
+}
+
+void SpecialFunctionHandler::handleSyscallCP(ExecutionState &state,
+                                           KInstruction *target,
+                                           std::vector<ref<Expr> > &arguments) {
+  arguments.erase(arguments.begin());
+  return handleSyscall(state, target, arguments);
 }

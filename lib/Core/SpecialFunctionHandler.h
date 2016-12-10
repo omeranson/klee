@@ -91,6 +91,9 @@ namespace klee {
     /* Convenience routines */
 
     std::string readStringAtAddress(ExecutionState &state, ref<Expr> address);
+    void handleMakeNamedSymbolic(ExecutionState &state,
+                                std::vector< ref<Expr> > &arguments,
+				std::string name);
     
     /* Handlers */
 
@@ -130,6 +133,8 @@ namespace klee {
     HANDLER(handleSetForking);
     HANDLER(handleSilentExit);
     HANDLER(handleStackTrace);
+    HANDLER(handleSyscall);
+    HANDLER(handleSyscallCP);
     HANDLER(handleUnderConstrained);
     HANDLER(handleWarning);
     HANDLER(handleWarningOnce);

@@ -3143,6 +3143,22 @@ bool Executor::createSymbolicReturnValue(const Instruction * caller, Function * 
   return true;
 }
 
+ExecutionState* Executor::simpleFork(ExecutionState &state) {
+  TimerStatIncrementer timer(stats::forkTime);
+  ExecutionState *result;
+
+  ++stats::forks;
+
+  result = state.branch();
+  state.ptreeNode->data = 0;
+  std::pair<PTree::Node*,PTree::Node*> node_pair = 
+    processTree->split(state.ptreeNode, result, &state);
+  result->ptreeNode = node_pair.first;
+  state.ptreeNode = node_pair.second;
+  addedStates.push_back(result);
+  return result;
+}
+
 void Executor::pauseState(ExecutionState &state) {
   // clone state
   ExecutionState * clone = new ExecutionState(state);
@@ -4094,6 +4110,7 @@ void Executor::resolveExact(ExecutionState &state,
 
 // TODO(oanson) Unify this method with executeMemoryOperation.
 // They are very similar.
+// XXX This is very wrong
 bool Executor::getExpressionFromMemory(ExecutionState &state,
                                       ref<Expr> & address, Expr::Width type,
                                       ref<Expr> & result) {

@@ -17,6 +17,7 @@
 // FIXME: We do not want to be exposing these? :(
 #include "../../lib/Core/AddressSpace.h"
 #include "klee/Internal/Module/KInstIterator.h"
+#include "klee/Internal/System/KernelSimulator.h"
 
 #include <map>
 #include <set>
@@ -205,6 +206,8 @@ public:
 
   /// @brief pauseOnRet Pause this state upon its next return
   bool pauseOnRet;
+
+  KernelSimulator kernel;
 private:
   ExecutionState() : ptreeNode(0) {}
 
