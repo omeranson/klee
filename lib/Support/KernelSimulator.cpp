@@ -2,6 +2,7 @@
 
 #include <syscall.h>
 #include <sys/stat.h>
+#include <sys/resource.h>
 #include <netinet/in.h>
 
 #include <llvm/Support/raw_ostream.h>
@@ -60,7 +61,7 @@ bool KernelSimulator::simpleReadUniquePointer(Executor & executor, ExecutionStat
     if (rl.begin() == rl.end()) {
       klee_warning("exprToPointer: Actually, NO resolutions");
     }
-    for (Executor::ExactResolutionList::iterator it = rl.begin(), 
+    for (Executor::ExactResolutionList::iterator it = rl.begin(),
            ie = rl.end(); it != ie; ++it) {
       const MemoryObject *mo = it->first.first;
       const ObjectState *os = it->first.second;
@@ -127,7 +128,7 @@ ref<Expr> KernelSimulator::syscall(Executor & executor, ExecutionState & state, 
          "invalid number of arguments to syscall");
   uint64_t op_z;
   if (!exprToUInt64(arguments[0], op_z)) {
-    executor.terminateStateOnError(state, 
+    executor.terminateStateOnError(state,
            "syscall called with non-constant operation",
            Executor::User);
     return 0;
@@ -147,10 +148,13 @@ ref<Expr> KernelSimulator::syscall(Executor & executor, ExecutionState & state, 
   KLEE_SYSCALL_CALL(getuid)
   KLEE_SYSCALL_CALL(write)
   KLEE_SYSCALL_CALL(writev)
+  KLEE_SYSCALL_CALL(prlimit64)
+  KLEE_SYSCALL_CALL(getrlimit)
+  KLEE_SYSCALL_CALL(setrlimit)
   #undef KLEE_SYSCALL_CALL
   default:
     klee_warning("syscall called with unsupported operation: %lu", op_z);
-    executor.terminateStateOnError(state, 
+    executor.terminateStateOnError(state,
                                    "syscall called with unsupported operation",
            Executor::User);
     return 0;
@@ -320,7 +324,7 @@ ref<Expr> KernelSimulator::getsockname(Executor & executor, ExecutionState & sta
 
   Executor::ExactResolutionList rl;
   executor.resolveExact(state, address, rl, "syscall_getsockname_size");
-  for (Executor::ExactResolutionList::iterator it = rl.begin(), 
+  for (Executor::ExactResolutionList::iterator it = rl.begin(),
          ie = rl.end(); it != ie; ++it) {
     Expr::Width type = 64; // Specific for 64-bit architecture
     const MemoryObject *mo = it->first.first;
@@ -351,7 +355,7 @@ ref<Expr> KernelSimulator::getcwd(Executor & executor, ExecutionState & state, s
   }
   Executor::ExactResolutionList rl;
   executor.resolveExact(state, address, rl, "getcwd_destination_buffer");
-  for (Executor::ExactResolutionList::iterator it = rl.begin(), 
+  for (Executor::ExactResolutionList::iterator it = rl.begin(),
                                                ie = rl.end(); it != ie; ++it) {
     const Array *array = executor.arrayCache.CreateArray("syscall::getcwd/" + llvm::utostr(++id), size);
     UpdateList ul(array, 0);
@@ -448,7 +452,7 @@ ref<Expr> KernelSimulator::writev(Executor & executor, ExecutionState & state, s
     executor.terminateStateOnError(state, message, Executor::User);
     return 0;
   }
-  
+
   int written = 0;
   // Printing to stdout and stderr if requested. XXX This is buggy and insecure
   if ((sockfd == 1) || (sockfd == 2)) {
@@ -493,5 +497,91 @@ ref<Expr> KernelSimulator::writev(Executor & executor, ExecutionState & state, s
   return constantInt(written);
 }
 
+ref<Expr> KernelSimulator::prlimit64(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+// In this special case, we return concrete data regarding what KLEE allows. (maybe)
+// Params: pid, resource, new (IN), old (OUT),
+// pid must be 0 or this pid
+// then, if old is given, call getrlimit(resource, old)
+// 	if new is given, call setrlimit(resource, new)
+// return
+  uint64_t pid;
+  if (!exprToUInt64(arguments[1], pid)) {
+    const char * message = "prlimit64 failed to get pid";
+    klee_warning(message);
+    executor.terminateStateOnError(state, message, Executor::User);
+    return 0;
+  }
+  if (pid != 0) /*|| (solve(EqExpr::create(pid, getpid())))*/ {
+    return 0; // TODO(oanson) and set errno
+  }
+  uint64_t resource;
+  if (!exprToUInt64(arguments[2], resource)) {
+    const char * message = "prlimit64 failed to get resource";
+    klee_warning(message);
+    executor.terminateStateOnError(state, message, Executor::User);
+    return 0;
+  }
+  if (_getrlimit(executor, state, resource, arguments[4]) == -1) {
+    return 0;
+  }
+  if (_setrlimit(executor, state, resource, arguments[3]) == -1) {
+    return 0;
+  }
+  return constantInt(0);
 }
 
+ref<Expr> KernelSimulator::getrlimit(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+  uint64_t resource;
+  if (!exprToUInt64(arguments[1], resource)) {
+    const char * message = "getrlimit failed to get resource";
+    klee_warning(message);
+    executor.terminateStateOnError(state, message, Executor::User);
+    return 0;
+  }
+  _getrlimit(executor, state, resource, arguments[2]);
+  return constantInt(0);
+}
+
+ref<Expr> KernelSimulator::setrlimit(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+  uint64_t resource;
+  if (!exprToUInt64(arguments[1], resource)) {
+    const char * message = "setrlimit failed to get resource";
+    klee_warning(message);
+    executor.terminateStateOnError(state, message, Executor::User);
+    return 0;
+  }
+  _setrlimit(executor, state, resource, arguments[2]);
+  return constantInt(0);
+}
+
+int KernelSimulator::_getrlimit(Executor & executor, ExecutionState & state,
+		uint64_t resource, ref<Expr> pointer) {
+  rlim_t soft = RLIM_INFINITY;
+  rlim_t hard = RLIM_INFINITY;
+  if (resource == RLIMIT_NOFILE) {
+    // Special handling.
+    soft = 1024;
+    hard = 1024;
+  }
+
+  Executor::ExactResolutionList rl;
+  executor.resolveExact(state, pointer, rl, "getrlimit");
+  for (Executor::ExactResolutionList::iterator it = rl.begin(),
+                                               ie = rl.end(); it != ie; ++it) {
+
+    const MemoryObject *mo = it->first.first;
+    const ObjectState *os = it->first.second;
+    ExecutionState *s = it->second;
+    ObjectState *wos = s->addressSpace.getWriteable(mo, os);
+    wos->write(0, constantInt(soft));
+    wos->write(sizeof(rlim_t), constantInt(hard));
+  }
+  return 0;
+}
+
+int KernelSimulator::_setrlimit(Executor & executor, ExecutionState & state, uint64_t resource, ref<Expr> pointer) {
+  // Do nothing
+  return 0;
+}
+
+}

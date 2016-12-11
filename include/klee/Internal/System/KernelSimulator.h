@@ -61,6 +61,8 @@ namespace klee {
     bool readDataAtAddress(Executor & executor, ExecutionState & state, ref<Expr> addressExpr, char * buf, uint64_t size);
     bool simpleReadUniquePointer(Executor & executor, ExecutionState &state, ref<Expr> expr, Expr::Width width, ref<Expr> & result);
 
+    int _getrlimit(Executor & executor, ExecutionState & state, uint64_t resource, ref<Expr> pointer);
+    int _setrlimit(Executor & executor, ExecutionState & state, uint64_t resource, ref<Expr> pointer);
   public:
   
     ref<Expr> syscall(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments);
@@ -76,6 +78,9 @@ namespace klee {
     KLEE_SYSCALL_FUNCTION(getuid);
     KLEE_SYSCALL_FUNCTION(write);
     KLEE_SYSCALL_FUNCTION(writev);
+    KLEE_SYSCALL_FUNCTION(prlimit64);
+    KLEE_SYSCALL_FUNCTION(getrlimit);
+    KLEE_SYSCALL_FUNCTION(setrlimit);
     #undef KLEE_SYSCALL_FUNCTION
 
   };
