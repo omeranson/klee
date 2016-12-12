@@ -141,6 +141,10 @@ void KernelSimulator::syscall(Executor & executor, ExecutionState & state, KInst
   #define KLEE_SYSCALL_CALL(name) \
   case SYS_##name:\
     return name(executor, state, target, arguments);
+  #define KLEE_SYSCALL_NOP(name) \
+  case SYS_##name:\
+    executor.bindLocal(target, state, constantInt(0)); \
+    return;
   KLEE_SYSCALL_CALL_FAILURES(socket, 0)
   KLEE_SYSCALL_CALL_FAILURES(connect, 0)
   KLEE_SYSCALL_CALL_FAILURES(open, 0)
@@ -150,6 +154,7 @@ void KernelSimulator::syscall(Executor & executor, ExecutionState & state, KInst
   KLEE_SYSCALL_CALL_FAILURES(getsockname, 0)
   KLEE_SYSCALL_CALL_FAILURES(getcwd, 0)
   KLEE_SYSCALL_CALL_FAILURES(getuid, 0)
+  KLEE_SYSCALL_CALL_FAILURES(getpid, 0)
   KLEE_SYSCALL_CALL_FAILURES(write, 0)
   KLEE_SYSCALL_CALL_FAILURES(writev, 0)
   KLEE_SYSCALL_CALL_FAILURES(prlimit64, 0)
@@ -157,6 +162,8 @@ void KernelSimulator::syscall(Executor & executor, ExecutionState & state, KInst
   KLEE_SYSCALL_CALL_FAILURES(setrlimit, 0)
   KLEE_SYSCALL_CALL(setsid) // TODO(oanson) Also fork and return correct errors, but setsid is not interesting enough currently
   KLEE_SYSCALL_CALL(exit)
+  KLEE_SYSCALL_CALL_NOP(rt_sigaction)
+  KLEE_SYSCALL_CALL_NOP(rt_sigprocmask)
   #undef KLEE_SYSCALL_CALL
   default: {
     std::string s;
@@ -408,6 +415,12 @@ void KernelSimulator::getcwd(Executor & executor, ExecutionState & state, KInstr
 void KernelSimulator::getuid(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
   ref<Expr> result;
   executor.createSymbolicValue(64, "getuid", result);
+  executor.bindLocal(target, state, result);
+}
+
+void KernelSimulator::getpid(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
+  ref<Expr> result;
+  executor.createSymbolicValue(64, "getpid", result);
   executor.bindLocal(target, state, result);
 }
 

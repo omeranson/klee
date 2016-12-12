@@ -80,6 +80,7 @@ namespace klee {
     KLEE_SYSCALL_FUNCTION(getsockname);
     KLEE_SYSCALL_FUNCTION(getcwd);
     KLEE_SYSCALL_FUNCTION(getuid);
+    KLEE_SYSCALL_FUNCTION(getpid);
     KLEE_SYSCALL_FUNCTION(write);
     KLEE_SYSCALL_FUNCTION(writev);
     KLEE_SYSCALL_FUNCTION(prlimit64);
