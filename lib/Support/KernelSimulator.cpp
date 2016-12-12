@@ -152,12 +152,15 @@ ref<Expr> KernelSimulator::syscall(Executor & executor, ExecutionState & state, 
   KLEE_SYSCALL_CALL(getrlimit)
   KLEE_SYSCALL_CALL(setrlimit)
   #undef KLEE_SYSCALL_CALL
-  default:
-    klee_warning("syscall called with unsupported operation: %lu", op_z);
-    executor.terminateStateOnError(state,
-                                   "syscall called with unsupported operation",
-           Executor::User);
+  default: {
+    std::string s;
+    llvm::raw_string_ostream rso(s);
+    rso << "syscall called with unsupported operation: " << op_z;
+    const char * message = rso.str().c_str();
+    klee_warning("%s", message);
+    executor.terminateStateOnError(state, message, Executor::User);
     return 0;
+  }
   }
 }
 
