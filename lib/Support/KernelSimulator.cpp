@@ -136,7 +136,7 @@ void KernelSimulator::syscall(Executor & executor, ExecutionState & state, KInst
   switch (op_z) {
   #define KLEE_SYSCALL_CALL_FAILURES(name, ncodes, ...) \
   case SYS_##name:\
-    forkAndFail(executor, state, target, ncodes, ##__VA_ARGS__) \
+    forkAndFail(executor, state, target, ncodes, ##__VA_ARGS__); \
     return name(executor, state, target, arguments);
   #define KLEE_SYSCALL_CALL(name) \
   case SYS_##name:\
@@ -145,25 +145,25 @@ void KernelSimulator::syscall(Executor & executor, ExecutionState & state, KInst
   case SYS_##name:\
     executor.bindLocal(target, state, constantInt(0)); \
     return;
-  KLEE_SYSCALL_CALL_FAILURES(socket, 0)
-  KLEE_SYSCALL_CALL_FAILURES(connect, 0)
-  KLEE_SYSCALL_CALL_FAILURES(open, 0)
-  KLEE_SYSCALL_CALL_FAILURES(close, 0)
-  KLEE_SYSCALL_CALL_FAILURES(fstat, 0)
-  KLEE_SYSCALL_CALL_FAILURES(mmap, 0)
-  KLEE_SYSCALL_CALL_FAILURES(getsockname, 0)
-  KLEE_SYSCALL_CALL_FAILURES(getcwd, 0)
-  KLEE_SYSCALL_CALL_FAILURES(getuid, 0)
-  KLEE_SYSCALL_CALL_FAILURES(getpid, 0)
-  KLEE_SYSCALL_CALL_FAILURES(write, 0)
-  KLEE_SYSCALL_CALL_FAILURES(writev, 0)
-  KLEE_SYSCALL_CALL_FAILURES(prlimit64, 0)
-  KLEE_SYSCALL_CALL_FAILURES(getrlimit, 0)
-  KLEE_SYSCALL_CALL_FAILURES(setrlimit, 0)
+  KLEE_SYSCALL_CALL_FAILURES(socket, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(connect, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(open, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(close, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(fstat, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(mmap, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(getsockname, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(getcwd, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(getuid, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(getpid, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(write, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(writev, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(prlimit64, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(getrlimit, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(setrlimit, 0, 0)
   KLEE_SYSCALL_CALL(setsid) // TODO(oanson) Also fork and return correct errors, but setsid is not interesting enough currently
   KLEE_SYSCALL_CALL(exit)
-  KLEE_SYSCALL_CALL_NOP(rt_sigaction)
-  KLEE_SYSCALL_CALL_NOP(rt_sigprocmask)
+  KLEE_SYSCALL_NOP(rt_sigaction)
+  KLEE_SYSCALL_NOP(rt_sigprocmask)
   #undef KLEE_SYSCALL_CALL
   default: {
     std::string s;
