@@ -133,25 +133,30 @@ void KernelSimulator::syscall(Executor & executor, ExecutionState & state, KInst
            Executor::User);
     return;
   }
-  forkAndFail(executor, state, target, 0);
   switch (op_z) {
+  #define KLEE_SYSCALL_CALL_FAILURES(name, ncodes, ...) \
+  case SYS_##name:\
+    forkAndFail(executor, state, target, ncodes, ##__VA_ARGS__) \
+    return name(executor, state, target, arguments);
   #define KLEE_SYSCALL_CALL(name) \
   case SYS_##name:\
     return name(executor, state, target, arguments);
-  KLEE_SYSCALL_CALL(socket)
-  KLEE_SYSCALL_CALL(connect)
-  KLEE_SYSCALL_CALL(open)
-  KLEE_SYSCALL_CALL(close)
-  KLEE_SYSCALL_CALL(fstat)
-  KLEE_SYSCALL_CALL(mmap)
-  KLEE_SYSCALL_CALL(getsockname)
-  KLEE_SYSCALL_CALL(getcwd)
-  KLEE_SYSCALL_CALL(getuid)
-  KLEE_SYSCALL_CALL(write)
-  KLEE_SYSCALL_CALL(writev)
-  KLEE_SYSCALL_CALL(prlimit64)
-  KLEE_SYSCALL_CALL(getrlimit)
-  KLEE_SYSCALL_CALL(setrlimit)
+  KLEE_SYSCALL_CALL_FAILURES(socket, 0)
+  KLEE_SYSCALL_CALL_FAILURES(connect, 0)
+  KLEE_SYSCALL_CALL_FAILURES(open, 0)
+  KLEE_SYSCALL_CALL_FAILURES(close, 0)
+  KLEE_SYSCALL_CALL_FAILURES(fstat, 0)
+  KLEE_SYSCALL_CALL_FAILURES(mmap, 0)
+  KLEE_SYSCALL_CALL_FAILURES(getsockname, 0)
+  KLEE_SYSCALL_CALL_FAILURES(getcwd, 0)
+  KLEE_SYSCALL_CALL_FAILURES(getuid, 0)
+  KLEE_SYSCALL_CALL_FAILURES(write, 0)
+  KLEE_SYSCALL_CALL_FAILURES(writev, 0)
+  KLEE_SYSCALL_CALL_FAILURES(prlimit64, 0)
+  KLEE_SYSCALL_CALL_FAILURES(getrlimit, 0)
+  KLEE_SYSCALL_CALL_FAILURES(setrlimit, 0)
+  KLEE_SYSCALL_CALL(setsid) // TODO(oanson) Also fork and return correct errors, but setsid is not interesting enough currently
+  KLEE_SYSCALL_CALL(exit)
   #undef KLEE_SYSCALL_CALL
   default: {
     std::string s;
@@ -613,4 +618,13 @@ int KernelSimulator::_setrlimit(Executor & executor, ExecutionState & state, uin
   return 0;
 }
 
+void KernelSimulator::exit(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
+  executor.terminateStateOnExit(state);
+}
+
+void KernelSimulator::setsid(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
+  ref<Expr> result;
+  executor.createSymbolicValue(64, "setsid", result);
+  executor.bindLocal(target, state, result);
+}
 }

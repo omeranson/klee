@@ -85,6 +85,8 @@ namespace klee {
     KLEE_SYSCALL_FUNCTION(prlimit64);
     KLEE_SYSCALL_FUNCTION(getrlimit);
     KLEE_SYSCALL_FUNCTION(setrlimit);
+    KLEE_SYSCALL_FUNCTION(exit);
+    KLEE_SYSCALL_FUNCTION(setsid);
     #undef KLEE_SYSCALL_FUNCTION
 
   };
