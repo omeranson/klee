@@ -118,7 +118,7 @@ ref<Expr> KernelSimulator::constantChar(char result) {
 	return ConstantExpr::create(result, Expr::Int8);
 }
 
-ref<Expr> KernelSimulator::syscall(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+void KernelSimulator::syscall(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
   // Assert arguments[0] is constant expression
   // switch/case over arguments[0]
   // do the magic
@@ -131,12 +131,13 @@ ref<Expr> KernelSimulator::syscall(Executor & executor, ExecutionState & state, 
     executor.terminateStateOnError(state,
            "syscall called with non-constant operation",
            Executor::User);
-    return 0;
+    return;
   }
+  forkAndFail(executor, state, target, 0);
   switch (op_z) {
   #define KLEE_SYSCALL_CALL(name) \
   case SYS_##name:\
-    return name(executor, state, arguments);
+    return name(executor, state, target, arguments);
   KLEE_SYSCALL_CALL(socket)
   KLEE_SYSCALL_CALL(connect)
   KLEE_SYSCALL_CALL(open)
@@ -158,8 +159,9 @@ ref<Expr> KernelSimulator::syscall(Executor & executor, ExecutionState & state, 
     rso << "syscall called with unsupported operation: " << op_z;
     const char * message = rso.str().c_str();
     klee_warning("%s", message);
+
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   }
 }
@@ -175,7 +177,28 @@ int KernelSimulator::nextFreeFileDescriptor() {
   return result;
 }
 
-ref<Expr> KernelSimulator::socket(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+void KernelSimulator::vForkAndFail(Executor & executor, ExecutionState & state, KInstruction * target, int ncodes, va_list codes) {
+  static unsigned id = 0;
+  ref<Expr> result;
+  executor.createSymbolicValue(64, "syscall failures" + llvm::utostr(++id), result);
+  executor.bindLocal(target, state, result);
+  ref<Expr> assumptions = EqExpr::create(constantInt(-ENOSYS), result);
+  for (int idx = 0; idx < ncodes; idx++) {
+    int code = va_arg(codes, int);
+    assumptions = OrExpr::create(result, 
+		    EqExpr::create(constantInt(code), result));
+  }
+  state.addConstraint(assumptions);
+}
+
+void KernelSimulator::forkAndFail(Executor & executor, ExecutionState & state, KInstruction * target, int ncodes, ...) {
+  va_list codes;
+  va_start ( codes, ncodes );
+  vForkAndFail(executor, state, target, ncodes, codes);
+  va_end(codes);
+}
+
+void KernelSimulator::socket(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
   int fdidx = nextFreeFileDescriptor();
   FileDescriptor & fd = fileDescriptors[fdidx];
   fd.FDTType = FDT_socket;
@@ -184,51 +207,51 @@ ref<Expr> KernelSimulator::socket(Executor & executor, ExecutionState & state, s
     executor.terminateStateOnError(state,
         "socket called with non-constant domain",
         Executor::User);
-    return 0;
+    return;
   }
   if (!exprToInt(arguments[2], fd.type)) {
     klee_warning("socket called with non-constant type");
     executor.terminateStateOnError(state,
         "socket called with non-constant type",
         Executor::User);
-    return 0;
+    return;
   }
   if (!exprToInt(arguments[3], fd.protocol)) {
     klee_warning("socket called with non-constant protocol");
     executor.terminateStateOnError(state,
         "socket called with non-constant protocol",
         Executor::User);
-    return 0;
+    return;
   }
-  return constantInt(fdidx);
+  executor.bindLocal(target, state, constantInt(fdidx));
 }
 
-ref<Expr> KernelSimulator::connect(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+void KernelSimulator::connect(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
   uint64_t sockfd;
   if (!exprToUInt64(arguments[1], sockfd)) {
     const char * message = "connect called with non-constant socket";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   if (sockfd >= fileDescriptors.size()) {
     const char * message = "connect on non-existant file-descriptor";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   FileDescriptor & fd = fileDescriptors[sockfd];
   if (fd.FDTType != FDT_socket) {
     const char * message = "connect on non-socket file descriptor";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   // TODO check other arguments?
-  return constantInt(0);
+  executor.bindLocal(target, state, constantInt(0));
 }
 
-ref<Expr> KernelSimulator::open(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+void KernelSimulator::open(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
   int fdidx = nextFreeFileDescriptor();
   FileDescriptor & fd = fileDescriptors[fdidx];
   fd.FDTType = FDT_file;
@@ -236,85 +259,85 @@ ref<Expr> KernelSimulator::open(Executor & executor, ExecutionState & state, std
     const char * message = "open called with non-constant flags";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
-  return constantInt(fdidx);
+  executor.bindLocal(target, state, constantInt(fdidx));
 }
 
-ref<Expr> KernelSimulator::close(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+void KernelSimulator::close(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
   uint64_t sockfd;
   if (!exprToUInt64(arguments[1], sockfd)) {
     const char * message = "close called with non-constant file-descriptor";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   if (sockfd >= fileDescriptors.size()) {
     const char * message = "close on non-existant file-descriptor";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   FileDescriptor & fd = fileDescriptors[sockfd];
   fd.FDTType = FDT_uninitialised;
-  return constantInt(0);
+  executor.bindLocal(target, state, constantInt(0));
 }
 
-ref<Expr> KernelSimulator::fstat(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+void KernelSimulator::fstat(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
   uint64_t sockfd;
   if (!exprToUInt64(arguments[1], sockfd)) {
     const char * message = "fstat called with non-constant file-descriptor";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   if (sockfd >= fileDescriptors.size()) {
     const char * message = "fstat on non-existant file-descriptor";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   FileDescriptor & fd = fileDescriptors[sockfd];
   if (fd.FDTType != FDT_file) {
     const char * message = "fstat on non-file file-descriptor";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   std::vector<ref<Expr> > make_symbolic_args;
   make_symbolic_args.push_back(arguments[2]);
   make_symbolic_args.push_back(ConstantExpr::create(sizeof(struct stat), Expr::Int64));
   executor.specialFunctionHandler->handleMakeNamedSymbolic(state, make_symbolic_args, "fstat");
-  return constantInt(0);
+  executor.bindLocal(target, state, constantInt(0));
 }
 
-ref<Expr> KernelSimulator::mmap(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+void KernelSimulator::mmap(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
     const char * message = "mmap unsupported";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
 }
 
-ref<Expr> KernelSimulator::getsockname(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+void KernelSimulator::getsockname(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
   uint64_t sockfd;
   if (!exprToUInt64(arguments[1], sockfd)) {
     const char * message = "getsockname called with non-constant socket";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   if (sockfd >= fileDescriptors.size()) {
     const char * message = "getsockname on non-existant file-descriptor";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   FileDescriptor & fd = fileDescriptors[sockfd];
   if (fd.FDTType != FDT_socket) {
     const char * message = "getsockname on non-socket file descriptor";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   std::vector<ref<Expr> > make_symbolic_args;
   make_symbolic_args.push_back(arguments[2]);
@@ -338,11 +361,11 @@ ref<Expr> KernelSimulator::getsockname(Executor & executor, ExecutionState & sta
     //executor.specialFunctionHandler->handleMakeNamedSymbolic(s, make_address_symbolic_args, "getsockname::size");
     mo->setName("getsockname#size");
     executor.executeMakeSymbolic(*s, mo, "getsockname#size");
+    executor.bindLocal(target, *s, constantInt(0));
   }
-  return constantInt(0);
 }
 
-ref<Expr> KernelSimulator::getcwd(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+void KernelSimulator::getcwd(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
   // TODO(oanson) Shouldn't getcwd always return the same thing?
   static unsigned id = 0;
   // Create array of size MAXPATH (cached)
@@ -354,7 +377,7 @@ ref<Expr> KernelSimulator::getcwd(Executor & executor, ExecutionState & state, s
     const char * message = "getcwd called with non-constant size";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   Executor::ExactResolutionList rl;
   executor.resolveExact(state, address, rl, "getcwd_destination_buffer");
@@ -373,36 +396,36 @@ ref<Expr> KernelSimulator::getcwd(Executor & executor, ExecutionState & state, s
     }
     mo->setName("getcwd");
     s->addSymbolic(mo, array);
+    executor.bindLocal(target, *s, constantInt(0));
   }
-  return constantInt(0);
 }
 
-ref<Expr> KernelSimulator::getuid(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+void KernelSimulator::getuid(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
   ref<Expr> result;
   executor.createSymbolicValue(64, "getuid", result);
-  return result;
+  executor.bindLocal(target, state, result);
 }
 
-ref<Expr> KernelSimulator::write(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+void KernelSimulator::write(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
   uint64_t sockfd;
   if (!exprToUInt64(arguments[1], sockfd)) {
     const char * message = "write called with non-constant socket";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   if (sockfd >= fileDescriptors.size()) {
     const char * message = "write on non-existant file-descriptor";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   FileDescriptor & fd = fileDescriptors[sockfd];
   if (fd.FDTType == FDT_uninitialised) {
     const char * message = "write on uninitialised file descriptor";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   // Printing to stdout and stderr if requested. XXX This is buggy and insecure
   uint64_t size;
@@ -410,7 +433,7 @@ ref<Expr> KernelSimulator::write(Executor & executor, ExecutionState & state, st
     const char * message = "write called with non-constant size";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   if ((sockfd == 1) || (sockfd == 2)) {
     char * buf = (char*)alloca(size);
@@ -418,42 +441,44 @@ ref<Expr> KernelSimulator::write(Executor & executor, ExecutionState & state, st
       const char * message = "write failed to get buffer";
       klee_warning(message);
       executor.terminateStateOnError(state, message, Executor::User);
-      return 0;
+      return;
     }
     int written = ::write(sockfd, buf, size);
-    return constantInt(written);
+    executor.bindLocal(target, state, constantInt(written));
+    return;
   }
-  return constantInt(size); // TODO(oanson) should be randomly less than size too
+  executor.bindLocal(target, state, constantInt(size));
+  return; // TODO(oanson) should be randomly less than size too
 
 }
 
-ref<Expr> KernelSimulator::writev(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+void KernelSimulator::writev(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
   uint64_t sockfd;
   if (!exprToUInt64(arguments[1], sockfd)) {
     const char * message = "writev called with non-constant socket";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   if (sockfd >= fileDescriptors.size()) {
     const char * message = "writev on non-existant file-descriptor";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   FileDescriptor & fd = fileDescriptors[sockfd];
   if (fd.FDTType == FDT_uninitialised) {
     const char * message = "writev on uninitialised file descriptor";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   uint64_t iovcnt;
   if (!exprToUInt64(arguments[2], iovcnt)) {
     const char * message = "writev called with non-constant iovcnt";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
 
   int written = 0;
@@ -464,7 +489,7 @@ ref<Expr> KernelSimulator::writev(Executor & executor, ExecutionState & state, s
       const char * message = "writev failed to get iov";
       klee_warning(message);
       executor.terminateStateOnError(state, message, Executor::User);
-      return 0;
+      return;
     }
     for (unsigned index = 0; index < iovcnt; index++) {
       // get len
@@ -474,14 +499,14 @@ ref<Expr> KernelSimulator::writev(Executor & executor, ExecutionState & state, s
         const char * message = "writev failed to get iov len";
         klee_warning(message);
         executor.terminateStateOnError(state, message, Executor::User);
-        return 0;
+        return;
       }
       uint64_t len_u64;
       if (!exprToUInt64(len, len_u64)) {
         const char * message = "writev failed to get iov len (2)";
         klee_warning(message);
         executor.terminateStateOnError(state, message, Executor::User);
-        return 0;
+        return;
       }
       // read it
       char * buf = (char*)alloca(len_u64);
@@ -489,7 +514,7 @@ ref<Expr> KernelSimulator::writev(Executor & executor, ExecutionState & state, s
         const char * message = "writev failed to get iov data";
         klee_warning(message);
         executor.terminateStateOnError(state, message, Executor::User);
-        return 0;
+        return;
       }
       // write it
       written += ::write(sockfd, buf, len_u64);
@@ -497,10 +522,10 @@ ref<Expr> KernelSimulator::writev(Executor & executor, ExecutionState & state, s
       iov = AddExpr::create(iov, constantInt(sizeof(struct iovec)));
     }
   }
-  return constantInt(written);
+  executor.bindLocal(target, state, constantInt(written));
 }
 
-ref<Expr> KernelSimulator::prlimit64(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+void KernelSimulator::prlimit64(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
 // In this special case, we return concrete data regarding what KLEE allows. (maybe)
 // Params: pid, resource, new (IN), old (OUT),
 // pid must be 0 or this pid
@@ -512,49 +537,50 @@ ref<Expr> KernelSimulator::prlimit64(Executor & executor, ExecutionState & state
     const char * message = "prlimit64 failed to get pid";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   if (pid != 0) /*|| (solve(EqExpr::create(pid, getpid())))*/ {
-    return 0; // TODO(oanson) and set errno
+    executor.bindLocal(target, state, constantInt(-1));
+    return; // TODO(oanson) and bind the correct error (call ForkAndFail)
   }
   uint64_t resource;
   if (!exprToUInt64(arguments[2], resource)) {
     const char * message = "prlimit64 failed to get resource";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   if (_getrlimit(executor, state, resource, arguments[4]) == -1) {
-    return 0;
+    return;
   }
   if (_setrlimit(executor, state, resource, arguments[3]) == -1) {
-    return 0;
+    return;
   }
-  return constantInt(0);
+  executor.bindLocal(target, state, constantInt(0));
 }
 
-ref<Expr> KernelSimulator::getrlimit(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+void KernelSimulator::getrlimit(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
   uint64_t resource;
   if (!exprToUInt64(arguments[1], resource)) {
     const char * message = "getrlimit failed to get resource";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   _getrlimit(executor, state, resource, arguments[2]);
-  return constantInt(0);
+  executor.bindLocal(target, state, constantInt(0));
 }
 
-ref<Expr> KernelSimulator::setrlimit(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments) {
+void KernelSimulator::setrlimit(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
   uint64_t resource;
   if (!exprToUInt64(arguments[1], resource)) {
     const char * message = "setrlimit failed to get resource";
     klee_warning(message);
     executor.terminateStateOnError(state, message, Executor::User);
-    return 0;
+    return;
   }
   _setrlimit(executor, state, resource, arguments[2]);
-  return constantInt(0);
+  executor.bindLocal(target, state, constantInt(0));
 }
 
 int KernelSimulator::_getrlimit(Executor & executor, ExecutionState & state,

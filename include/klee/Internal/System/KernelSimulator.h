@@ -17,6 +17,7 @@
 
 #include <fcntl.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include <unistd.h>
 #include <vector>
 
@@ -63,10 +64,13 @@ namespace klee {
 
     int _getrlimit(Executor & executor, ExecutionState & state, uint64_t resource, ref<Expr> pointer);
     int _setrlimit(Executor & executor, ExecutionState & state, uint64_t resource, ref<Expr> pointer);
+
+    void forkAndFail(Executor & executor, ExecutionState & state, KInstruction * target, int ncodes, ...);
+    void vForkAndFail(Executor & executor, ExecutionState & state, KInstruction * target, int ncodes, va_list codes);
   public:
   
-    ref<Expr> syscall(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments);
-    #define KLEE_SYSCALL_FUNCTION(name) ref<Expr> name(Executor & executor, ExecutionState & state, std::vector<ref<Expr> > &arguments)
+    void syscall(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments);
+    #define KLEE_SYSCALL_FUNCTION(name) void name(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments)
     KLEE_SYSCALL_FUNCTION(socket);
     KLEE_SYSCALL_FUNCTION(connect);
     KLEE_SYSCALL_FUNCTION(open);

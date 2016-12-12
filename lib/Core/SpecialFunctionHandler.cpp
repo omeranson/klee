@@ -799,15 +799,7 @@ void SpecialFunctionHandler::handleDivRemOverflow(ExecutionState &state,
 void SpecialFunctionHandler::handleSyscall(ExecutionState &state,
                                            KInstruction *target,
                                            std::vector<ref<Expr> > &arguments) {
-  ExecutionState &syscallFailState = *executor.simpleFork(state);
-  executor.bindLocal(target, syscallFailState,
-                     ConstantExpr::create(-1, Expr::Int64));
-  // TODO(oanson) Set errno to symbolic on syscallFailState
-  // If result isn't -1, branch, and return also -1
-  ref<Expr> result = state.kernel.syscall(executor, state, arguments);
-  if (!result.isNull()) {
-    executor.bindLocal(target, state, result);
-  }
+  state.kernel.syscall(executor, state, target, arguments);
 }
 
 void SpecialFunctionHandler::handleSyscallCP(ExecutionState &state,
