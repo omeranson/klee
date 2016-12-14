@@ -434,24 +434,33 @@ void KernelSimulator::getsockname(Executor & executor, ExecutionState & state, K
   make_symbolic_args.push_back(0);
 
   ref<Expr> address = arguments[3];
-  //std::vector<ref<Expr> > make_address_symbolic_args;
-  //make_address_symbolic_args.push_back(address);
-  //make_address_symbolic_args.push_back(8 /* 64 / 8 */);
 
   Executor::ExactResolutionList rl;
   executor.resolveExact(state, address, rl, "syscall_getsockname_size");
   for (Executor::ExactResolutionList::iterator it = rl.begin(),
          ie = rl.end(); it != ie; ++it) {
-    Expr::Width type = 64; // Specific for 64-bit architecture
     const MemoryObject *mo = it->first.first;
     const ObjectState *os = it->first.second;
     ExecutionState *s = it->second;
-    make_symbolic_args[1] = os->read(mo->getOffsetExpr(address), type);
+    // Calculate the size
+    int size = mo->size;
+    int offset;
+    if (!exprToInt(mo->getOffsetExpr(address), offset)) {
+      const char * message = "getsockname with non-constant size of addrlen";
+      klee_warning(message);
+      executor.terminateStateOnError(state, message, Executor::User);
+      return;
+    }
+    int bytes = size - offset;
+    bytes = bytes > 8 ? 8 : bytes;
+    Expr::Width type = bytes*8;
+    make_symbolic_args[1] = os->read(offset, type);
     executor.specialFunctionHandler->handleMakeNamedSymbolic(*s, make_symbolic_args, "getsockname");
     //executor.specialFunctionHandler->handleMakeNamedSymbolic(s, make_address_symbolic_args, "getsockname::size");
     mo->setName("getsockname#size");
     executor.executeMakeSymbolic(*s, mo, "getsockname#size");
     executor.bindLocal(target, *s, constantInt(0));
+    // TODO Also make the returned size symbolic
   }
 }
 
