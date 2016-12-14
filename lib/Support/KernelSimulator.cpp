@@ -196,14 +196,15 @@ void KernelSimulator::vForkAndFail(Executor & executor, ExecutionState & state, 
   static unsigned id = 0;
   ref<Expr> result;
   executor.createSymbolicValue(64, "syscall failures" + llvm::utostr(++id), result);
-  executor.bindLocal(target, state, result);
+  ExecutionState &syscallFailState = *executor.simpleFork(state);
+  executor.bindLocal(target, syscallFailState, result);
   ref<Expr> assumptions = EqExpr::create(constantInt(-ENOSYS), result);
   for (int idx = 0; idx < ncodes; idx++) {
     int code = va_arg(codes, int);
     assumptions = OrExpr::create(result, 
 		    EqExpr::create(constantInt(code), result));
   }
-  state.addConstraint(assumptions);
+  syscallFailState.addConstraint(assumptions);
 }
 
 void KernelSimulator::forkAndFail(Executor & executor, ExecutionState & state, KInstruction * target, int ncodes, ...) {
