@@ -72,8 +72,11 @@ namespace klee {
     void syscall(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments);
     #define KLEE_SYSCALL_FUNCTION(name) void name(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments)
     KLEE_SYSCALL_FUNCTION(socket);
+    KLEE_SYSCALL_FUNCTION(bind);
     KLEE_SYSCALL_FUNCTION(connect);
     KLEE_SYSCALL_FUNCTION(open);
+    KLEE_SYSCALL_FUNCTION(ioctl);
+    KLEE_SYSCALL_FUNCTION(fcntl);
     KLEE_SYSCALL_FUNCTION(close);
     KLEE_SYSCALL_FUNCTION(fstat);
     KLEE_SYSCALL_FUNCTION(mmap);

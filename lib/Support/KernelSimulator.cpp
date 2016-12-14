@@ -146,8 +146,11 @@ void KernelSimulator::syscall(Executor & executor, ExecutionState & state, KInst
     executor.bindLocal(target, state, constantInt(0)); \
     return;
   KLEE_SYSCALL_CALL_FAILURES(socket, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(bind, 0, 0)
   KLEE_SYSCALL_CALL_FAILURES(connect, 0, 0)
   KLEE_SYSCALL_CALL_FAILURES(open, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(ioctl, 0, 0)
+  KLEE_SYSCALL_CALL_FAILURES(fcntl, 0, 0)
   KLEE_SYSCALL_CALL_FAILURES(close, 0, 0)
   KLEE_SYSCALL_CALL_FAILURES(fstat, 0, 0)
   KLEE_SYSCALL_CALL_FAILURES(mmap, 0, 0)
@@ -236,6 +239,81 @@ void KernelSimulator::socket(Executor & executor, ExecutionState & state, KInstr
     return;
   }
   executor.bindLocal(target, state, constantInt(fdidx));
+}
+
+void KernelSimulator::bind(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
+  uint64_t sockfd;
+  if (!exprToUInt64(arguments[1], sockfd)) {
+    const char * message = "bind called with non-constant socket";
+    klee_warning(message);
+    executor.terminateStateOnError(state, message, Executor::User);
+    return;
+  }
+  if (sockfd >= fileDescriptors.size()) {
+    const char * message = "bind on non-existant file-descriptor";
+    klee_warning(message);
+    executor.terminateStateOnError(state, message, Executor::User);
+    return;
+  }
+  FileDescriptor & fd = fileDescriptors[sockfd];
+  if (fd.FDTType != FDT_socket) {
+    const char * message = "bind on non-socket file descriptor";
+    klee_warning(message);
+    executor.terminateStateOnError(state, message, Executor::User);
+    return;
+  }
+  // TODO check other arguments?
+  executor.bindLocal(target, state, constantInt(0));
+}
+
+void KernelSimulator::ioctl(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
+  uint64_t sockfd;
+  if (!exprToUInt64(arguments[1], sockfd)) {
+    const char * message = "ioctl called with non-constant socket";
+    klee_warning(message);
+    executor.terminateStateOnError(state, message, Executor::User);
+    return;
+  }
+  if (sockfd >= fileDescriptors.size()) {
+    const char * message = "ioctl on non-existant file-descriptor";
+    klee_warning(message);
+    executor.terminateStateOnError(state, message, Executor::User);
+    return;
+  }
+  FileDescriptor & fd = fileDescriptors[sockfd];
+  if (fd.FDTType != FDT_socket) {
+    const char * message = "ioctl on non-socket file descriptor";
+    klee_warning(message);
+    executor.terminateStateOnError(state, message, Executor::User);
+    return;
+  }
+  // TODO check other arguments?
+  executor.bindLocal(target, state, constantInt(0));
+}
+
+void KernelSimulator::fcntl(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
+  uint64_t sockfd;
+  if (!exprToUInt64(arguments[1], sockfd)) {
+    const char * message = "fcntl called with non-constant socket";
+    klee_warning(message);
+    executor.terminateStateOnError(state, message, Executor::User);
+    return;
+  }
+  if (sockfd >= fileDescriptors.size()) {
+    const char * message = "fcntl on non-existant file-descriptor";
+    klee_warning(message);
+    executor.terminateStateOnError(state, message, Executor::User);
+    return;
+  }
+  FileDescriptor & fd = fileDescriptors[sockfd];
+  if (fd.FDTType != FDT_socket) {
+    const char * message = "fcntl on non-socket file descriptor";
+    klee_warning(message);
+    executor.terminateStateOnError(state, message, Executor::User);
+    return;
+  }
+  // TODO check other arguments?
+  executor.bindLocal(target, state, constantInt(0));
 }
 
 void KernelSimulator::connect(Executor & executor, ExecutionState & state, KInstruction * target, std::vector<ref<Expr> > &arguments) {
