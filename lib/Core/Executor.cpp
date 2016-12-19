@@ -1701,7 +1701,14 @@ void Executor::setPauseOnRetByStack(ExecutionState & state, bool value) {
 }
 
 void Executor::pauseOtherStates(ExecutionState & state) {
-  setPauseOnRetByStack(state, true);
+  for (std::set<ExecutionState*>::iterator sit=states.begin(),
+                                           eit=states.end();
+      sit != eit; sit++) {
+    if ((&state != *sit) && (isPrefix(state.pauseStack, (*sit)->pauseStack))) {
+      (*sit)->pauseOnRet = true;
+      pauseState(**sit);
+    }
+  }
 }
 
 void Executor::resumeOtherStates(ExecutionState & state) {
@@ -1711,7 +1718,7 @@ void Executor::resumeOtherStates(ExecutionState & state) {
   while (sit != eit) {
     cur = sit++;
     if (isPrefix(state.pauseStack, (*cur)->pauseStack)) {
-      resumeState(**cur);
+      resumeState(state, **cur);
     }
   }
   // Maybe it wasn't paused yet...
@@ -3162,22 +3169,24 @@ ExecutionState* Executor::simpleFork(ExecutionState &state) {
 }
 
 void Executor::pauseState(ExecutionState &state) {
-  // clone state
-  ExecutionState * clone = new ExecutionState(state);
-  clone->pc = clone->prevPC;
-  state.ptreeNode->data = 0;
-  std::pair<PTree::Node*,PTree::Node*> res = 
-        processTree->split(state.ptreeNode, clone, &state);
-  clone->ptreeNode = res.first;
-  state.ptreeNode = res.second;
   // Then terminate original
-  terminateState(state);
-  pausedStates.insert(clone);
+  pausedStates.insert(&state);
+  if (searcher) {
+    std::vector<ExecutionState *> removedStates;
+    removedStates.push_back(&state);
+    std::vector<ExecutionState *> ddedStates;
+    searcher->update(&state, addedStates, removedStates);
+  }
 }
 
-void Executor::resumeState(ExecutionState &state) {
-  addedStates.push_back(&state);
-  pausedStates.erase(&state);
+void Executor::resumeState(ExecutionState &state, ExecutionState &resumedState) {
+  pausedStates.erase(&resumedState);
+  if (searcher) {
+    std::vector<ExecutionState *> removedStates;
+    std::vector<ExecutionState *> addedStates;
+    addedStates.push_back(&resumedState);
+    searcher->update(&state, addedStates, removedStates);
+  }
 }
 
 void Executor::updateStates(ExecutionState *current) {

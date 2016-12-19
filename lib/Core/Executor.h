@@ -486,7 +486,7 @@ private:
   void createSymbolicValue(Expr::Width width, llvm::StringRef name, ref<Expr> & result);
 
   void pauseState(ExecutionState &state);
-  void resumeState(ExecutionState &state);
+  void resumeState(ExecutionState &state, ExecutionState &resumedState);
   void setPauseOnRetByStack(ExecutionState & state, bool value);
   void pauseOtherStates(ExecutionState & state);
   void resumeOtherStates(ExecutionState & state);
