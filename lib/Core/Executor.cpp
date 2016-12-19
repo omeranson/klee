@@ -2011,8 +2011,10 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     if (UseLATESTAlgorithm) {
       bool execAnyway = LATESTIsExecuteFunctionAnyway(state, f);
       if (!execAnyway) {
-        const MemoryAccessPass::MemoryAccessInstVisitor * visitor = summaries.getVisitor(f);
-        bool isSummariseFunction = visitor->isSummariseFunction();
+        //const MemoryAccessPass::MemoryAccessInstVisitor * visitor = summaries.getVisitor(f);
+        //bool isSummariseFunction = visitor->isSummariseFunction();
+        bool isSummariseFunction = true;
+        //bool isSummariseFunction = false;
         if (ExecutionStateReplayState_Replay == state.isInReplay()) {
           state.pauseStack.push_back(pauseStackNo++);
           state.nextIsInReplay = isSummariseFunction ?
