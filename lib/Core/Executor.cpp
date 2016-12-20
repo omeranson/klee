@@ -337,6 +337,12 @@ namespace {
             cl::desc("Force this symbol to be external"),
             cl::value_desc("symbol")
   );
+
+  cl::list<std::string>
+  SummariseFunction("summarise-function",
+            cl::desc("Summarise this function when using the LATEST algorithm"),
+            cl::value_desc("symbol")
+  );
 }
 
 
@@ -2018,10 +2024,7 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     if (UseLATESTAlgorithm) {
       bool execAnyway = LATESTIsExecuteFunctionAnyway(state, f);
       if (!execAnyway) {
-        //const MemoryAccessPass::MemoryAccessInstVisitor * visitor = summaries.getVisitor(f);
-        //bool isSummariseFunction = visitor->isSummariseFunction();
-        bool isSummariseFunction = true;
-        //bool isSummariseFunction = false;
+        bool isSummariseFunction = this->isSummariseFunction(f);
         if (ExecutionStateReplayState_Replay == state.isInReplay()) {
           state.pauseStack.push_back(pauseStackNo++);
           state.nextIsInReplay = isSummariseFunction ?
@@ -2883,6 +2886,29 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     }
     break;
   }
+}
+
+bool Executor::isSummariseFunction(Function * f) {
+        //const MemoryAccessPass::MemoryAccessInstVisitor * visitor = summaries.getVisitor(f);
+        //bool isSummariseFunction = visitor->isSummariseFunction();
+        //bool isSummariseFunction = false;
+	if (!f) {
+		return false;
+	}
+	std::string name = f->getName().str();
+	return isSummariseFunction(name);
+}
+
+bool Executor::isSummariseFunction(std::string & name) {
+  std::vector<std::string>::iterator sf_it;
+  std::vector<std::string>::iterator sf_ie;
+  for (sf_it = SummariseFunction.begin(), sf_ie = SummariseFunction.end();
+          sf_it != sf_ie; ++sf_it) {
+    if (name == *sf_it) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki, Function * f) {

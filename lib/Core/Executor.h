@@ -325,6 +325,8 @@ private:
                                       ref<Expr> & result);
   bool isForcedExternal(llvm::Function * f);
   bool isForcedExternal(std::string & name);
+  bool isSummariseFunction(std::string & name);
+  bool isSummariseFunction(llvm::Function * f);
   // do address resolution / object binding / out of bounds checking
   // and perform the operation
   bool executeMemoryOperation(ExecutionState &state,
