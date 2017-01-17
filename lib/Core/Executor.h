@@ -36,6 +36,7 @@ namespace llvm {
   class BasicBlock;
   class BranchInst;
   class CallInst;
+  class CallSite;
   class Constant;
   class ConstantExpr;
   class Function;
@@ -439,6 +440,17 @@ private:
   void printDebugInstructions(ExecutionState &state);
   void doDumpStates();
 
+  ref<Expr> createSymbolicValue(Expr::Width, llvm::StringRef &);
+  bool createSymbolicReturnValue(const llvm::Instruction *, llvm::StringRef &, ref<Expr> &);
+  bool isSummariseFunction(llvm::Value *);
+  bool isSummariseFunction(std::string &);
+  void summariseFunctionCall(ExecutionState &, KInstruction *,
+		llvm::CallSite *, std::vector< ref<Expr> > &);
+  void summariseFunctionCallArguments(
+		  std::vector<ExecutionState*> &,
+		  llvm::CallSite *,
+		  std::vector< ref<Expr> > &,
+		  unsigned);
 public:
   Executor(const InterpreterOptions &opts, InterpreterHandler *ie);
   virtual ~Executor();

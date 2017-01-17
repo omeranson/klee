@@ -325,6 +325,11 @@ namespace {
             cl::desc("Force this symbol to be external"),
             cl::value_desc("symbol")
   );
+  cl::list<std::string>
+  SummariseFunction("summarise-function",
+            cl::desc("Summarise this function when using the LATEST algorithm"),
+            cl::value_desc("symbol")
+  );
 }
 
 
@@ -1096,7 +1101,6 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
       ref<Expr> res = ConcatExpr::createN(kids.size(), kids.data());
       return cast<ConstantExpr>(res);
     } else if (const ConstantVector *cv = dyn_cast<ConstantVector>(c)) {
-	  klee_message("evalConstant(): Is a vector");
       llvm::SmallVector<ref<Expr>, 4> kids;
       for (unsigned i = cv->getNumOperands(); i != 0; --i) {
         unsigned op = i-1;
@@ -1107,7 +1111,10 @@ ref<klee::ConstantExpr> Executor::evalConstant(const Constant *c) {
       return cast<ConstantExpr>(res);
     } else {
       // Constant{Vector}
-      llvm::report_fatal_error("invalid argument to evalConstant()");
+      std::string s;
+      llvm::raw_string_ostream rso(s);
+      rso << "invalid argument to evalConstant(): " << *c;
+      llvm::report_fatal_error(rso.str().c_str());
     }
   }
 }
@@ -1837,7 +1844,9 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
     for (unsigned j=0; j<numArgs; ++j)
       arguments.push_back(eval(ki, j+1, state).value);
 
-    if (f) {
+    if (isSummariseFunction(fp)) {
+      summariseFunctionCall(state, ki, &cs, arguments);
+    } else if (f) {
       const FunctionType *fType = 
         dyn_cast<FunctionType>(cast<PointerType>(f->getType())->getElementType());
       const FunctionType *fpType =
@@ -2663,6 +2672,129 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
 	terminateStateOnExecError(state, "illegal instruction " + opcodeName);
     }
     break;
+  }
+}
+
+bool Executor::isSummariseFunction(Value * value) {
+	if (!value) {
+		return false;
+	}
+	std::string name = value->getName().str();
+	return isSummariseFunction(name);
+}
+
+bool Executor::isSummariseFunction(std::string & name) {
+  std::vector<std::string>::iterator sf_it;
+  std::vector<std::string>::iterator sf_ie;
+  for (sf_it = SummariseFunction.begin(), sf_ie = SummariseFunction.end();
+          sf_it != sf_ie; ++sf_it) {
+    if (name == *sf_it) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void Executor::summariseFunctionCallArguments(
+    std::vector<ExecutionState*> &states,
+    CallSite * cs,
+    std::vector< ref<Expr> > &arguments,
+    unsigned idx) {
+  static unsigned id = 0;
+  Value * argValue = cs->getArgument(idx);
+  Type * argType = argValue->getType();
+  if ((!argType->isPointerTy()) && (!argType->isArrayTy())) {
+    return;
+  }
+  ref<Expr> argExpr = arguments[idx];
+  unsigned count = states.size();
+  while (count > 0) {
+    ExecutionState & state = *states[0];
+    Executor::ExactResolutionList rl;
+    resolveExact(state, argExpr, rl, "summarise_function");
+    states.erase(states.begin());
+    --count;
+    for (ExactResolutionList::iterator it = rl.begin(),
+                                       ie = rl.end(); it != ie; ++it) {
+      const MemoryObject *mo = it->first.first;
+      const ObjectState *os = it->first.second;
+      ExecutionState *s = it->second;
+      ObjectState *wos = s->addressSpace.getWriteable(mo, os);
+
+      ref<Expr> offsetExpr = mo->getOffsetExpr(argExpr);
+      ConstantExpr *CE = dyn_cast<ConstantExpr>(offsetExpr);
+      if (!CE) {
+        terminateStateOnError(*s, "Summarising function: Pointer not constant",
+                              User);
+        continue;
+      }
+      unsigned offset = cast<ConstantExpr>(CE)->getZExtValue();
+      if (offset >= mo->size) {
+        terminateStateOnError(*s, "Summarising function: Pointer beyond end of allocated block",
+                              User);
+        continue;
+      }
+      const Array *array = arrayCache.CreateArray("summarise_function/" + llvm::utostr(++id), mo->size - offset);
+      UpdateList ul(array, 0);
+      unsigned arrayOffset = 0;
+      bool isFirst = true;
+      ref<Expr> allValues;
+      while (offset < mo->size) {
+        ref<Expr> value = ReadExpr::create(ul, ConstantExpr::create(arrayOffset++, Expr::Int32));
+        wos->write(offset, value);
+	++offset;
+	if (isFirst) {
+	  allValues = value;
+	} else {
+	  allValues = ConcatExpr::create(allValues, value);
+	}
+      }
+      s->addSymbolic(mo, array);
+      states.push_back(s);
+    }
+  }
+}
+
+ref<Expr> Executor::createSymbolicValue(
+		Expr::Width width, llvm::StringRef &name) {
+  static unsigned counter = 0;
+  size_t size = Expr::getMinBytesForWidth(width);
+  std::string symbolicsName;
+  llvm::raw_string_ostream name_rso(symbolicsName);
+  name_rso << name << "_summary_" << counter++;
+  const Array *array = arrayCache.CreateArray(name_rso.str(), size);
+  return Expr::createTempRead(array, width);
+}
+
+bool Executor::createSymbolicReturnValue(const Instruction * caller, llvm::StringRef & name, ref<Expr> & result) {
+  LLVM_TYPE_Q Type *type = caller->getType();
+  if (type == Type::getVoidTy(getGlobalContext())) {
+  	return false;
+  }
+  Expr::Width width = getWidthForLLVMType(type);
+  result = createSymbolicValue(width, name);
+  return true;
+}
+
+void Executor::summariseFunctionCall(ExecutionState & state, KInstruction * ki,
+		CallSite * cs, std::vector< ref<Expr> > &arguments) {
+  Value * calledValue = cs->getCalledValue();
+  llvm::StringRef name = "<unknown>";
+  if (calledValue && calledValue->hasName()) {
+    name = calledValue->getName();
+  }
+  ref<Expr> value;
+  bool hasReturnValue = createSymbolicReturnValue(ki->inst, name, value);
+  if (hasReturnValue) {
+    bindLocal(ki, state, value);
+  }
+  // Pointers passed as argument
+  // We assume arguments and the callsite's arguments are the same length
+  assert(arguments.size() == cs->arg_size() && "Wrong number of arguments");
+  std::vector<ExecutionState *> states;
+  states.push_back(&state);
+  for (unsigned idx = 0; idx < arguments.size(); idx++) {
+    summariseFunctionCallArguments(states, cs, arguments, idx);
   }
 }
 
