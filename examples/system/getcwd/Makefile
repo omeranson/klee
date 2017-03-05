@@ -3,7 +3,7 @@ KCFLAGS=-I/home/oanson/opt/klee-install/include
 CFLAGS=-g
 CXXFLAGS=
 
-KLDFLAGS=/home/oanson/projects/klee/Release+Asserts/lib/ofiles/KTest.o -L/home/oanson/projects/klee/Release+Asserts/lib
+KLDFLAGS=-L/home/oanson/projects/klee/Release+Asserts/lib
 LDFLAGS=
 CXXLDFLAGS=
 

@@ -1,24 +1,35 @@
-#include <stdio.h>
-#include <unistd.h>
+#include <assert.h>
 #include <limits.h>
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
+
+static char cwd[PATH_MAX];
 
 int main(int argc, char * argv[]) {
-	char cwd[PATH_MAX];
+	printf("cwd is here: %p\n", cwd);
 	getcwd(cwd, PATH_MAX);
 	if (strcmp(cwd, "/") == 0) {
-		write(1, "I'm at root!\n", sizeof("I'm at root!\n")-1);
+		printf("I'm at root!\n");
+		printf("cwd is: %s\n", cwd);
+		assert(0 && "I'm at root!\n");
 		return 0;
 	}
 	if (strncmp(cwd, "/home", sizeof("/home")-1) == 0) {
-		write(1, "I'm at home!\n", sizeof("I'm at home!\n")-1);
+		printf("I'm at home!\n");
+		printf("cwd is: %s\n", cwd);
+		assert(0 && "I'm at home!\n");
 		return 0;
 	}
 	if (strncmp(cwd, "/tmp", sizeof("/tmp")-1) == 0) {
-		write(1, "I'm fleeting!\n", sizeof("I'm fleeting!\n")-1);
+		printf("I'm fleeting!\n");
+		printf("cwd is: %s\n", cwd);
+		assert(0 && "I'm fleeting!\n");
 		return 0;
 	}
-	write(1, "I'm... somewhere else!\n", sizeof("I'm... somewhere else!\n")-1);
+	printf("I'm... somewhere else!\n");
+	printf("cwd is: %s\n", cwd);
+	assert(0 && "I'm... somewhere else!\n");
 	/*
 	int len = strlen(cwd);
 	for (int idx = 0; idx < len; idx++) {
