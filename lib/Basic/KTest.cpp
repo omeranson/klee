@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
 
 #define KTEST_VERSION 3
 #define KTEST_MAGIC_SIZE 5
@@ -180,35 +181,57 @@ int kTest_toFile(KTest *bo, const char *path) {
   FILE *f = fopen(path, "wb");
   unsigned i;
 
-  if (!f) 
+  if (!f) {
+    fprintf(stderr, "Failed to open file: %s\n", path);
     goto error;
-  if (fwrite(KTEST_MAGIC, strlen(KTEST_MAGIC), 1, f)!=1)
+  }
+  if (fwrite(KTEST_MAGIC, strlen(KTEST_MAGIC), 1, f)!=1) {
+    fprintf(stderr, "Failed to write KTEST_MAGIC: %s\n", strerror(errno));
     goto error;
-  if (!write_uint32(f, KTEST_VERSION))
+  }
+  if (!write_uint32(f, KTEST_VERSION)) {
+    fprintf(stderr, "Failed to write KTEST_VERSION: %s\n", strerror(errno));
     goto error;
+  }
       
-  if (!write_uint32(f, bo->numArgs))
+  if (!write_uint32(f, bo->numArgs)) {
+    fprintf(stderr, "Failed to write number of arguments: %s\n", strerror(errno));
     goto error;
+  }
   for (i=0; i<bo->numArgs; i++) {
-    if (!write_string(f, bo->args[i]))
+    if (!write_string(f, bo->args[i])) {
+      fprintf(stderr, "Failed to write argument %d: %s\n", i, strerror(errno));
       goto error;
+    }
   }
 
-  if (!write_uint32(f, bo->symArgvs))
+  if (!write_uint32(f, bo->symArgvs)) {
+    fprintf(stderr, "Failed to write symArgvs: %s\n", strerror(errno));
     goto error;
-  if (!write_uint32(f, bo->symArgvLen))
+  }
+  if (!write_uint32(f, bo->symArgvLen)) {
+    fprintf(stderr, "Failed to write symArgvLen: %s\n", strerror(errno));
     goto error;
+  }
   
-  if (!write_uint32(f, bo->numObjects))
+  if (!write_uint32(f, bo->numObjects)) {
+    fprintf(stderr, "Failed to write number of objects: %s\n", strerror(errno));
     goto error;
+  }
   for (i=0; i<bo->numObjects; i++) {
     KTestObject *o = &bo->objects[i];
-    if (!write_string(f, o->name))
+    if (!write_string(f, o->name)) {
+      fprintf(stderr, "Failed to write object name %d %s: %s\n", i, o->name, strerror(errno));
       goto error;
-    if (!write_uint32(f, o->numBytes))
+    }
+    if (!write_uint32(f, o->numBytes)) {
+      fprintf(stderr, "Failed to write object length %d %s: %s\n", i, o->name, strerror(errno));
       goto error;
-    if (fwrite(o->bytes, o->numBytes, 1, f)!=1)
+    }
+    if (fwrite(o->bytes, o->numBytes, 1, f)!=1) {
+      fprintf(stderr, "Failed to write object data %d %s: %s\n", i, o->name, strerror(errno));
       goto error;
+    }
   }
 
   fclose(f);
