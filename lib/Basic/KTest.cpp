@@ -56,8 +56,9 @@ static int write_string(FILE *f, const char *value) {
   unsigned len = strlen(value);
   if (!write_uint32(f, len))
     return 0;
-  if (fwrite(value, len, 1, f)!=1)
-    return 0;
+  if (len != 0)
+    if (fwrite(value, len, 1, f)!=1)
+      return 0;
   return 1;
 }
 
