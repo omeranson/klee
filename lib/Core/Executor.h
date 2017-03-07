@@ -117,7 +117,7 @@ public:
     Unhandled
   };
 
-private:
+public:
   static const char *TerminateReasonNames[];
 
   class TimerInfo;
@@ -292,6 +292,11 @@ private:
                    ref<Expr> address,
                    KInstruction *target = 0);
   
+  bool isOverApproximated(llvm::Function * f);
+  void overApproximate(ExecutionState &state, 
+                       KInstruction *ki,
+                       llvm::Function *f,
+                       std::vector< ref<Expr> > &arguments);
   void executeCall(ExecutionState &state, 
                    KInstruction *ki,
                    llvm::Function *f,

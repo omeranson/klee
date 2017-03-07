@@ -116,9 +116,6 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_alias_function", handleAliasFunction, false),
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
-  add("__syscall", handleSyscall, true),
-  add("syscall", handleSyscall, true),
-  add("__syscall_cp_asm", handleSyscallCP, true),
 
 
   // operator delete[](void*)
@@ -784,100 +781,4 @@ void SpecialFunctionHandler::handleDivRemOverflow(ExecutionState &state,
                                                std::vector<ref<Expr> > &arguments) {
   executor.terminateStateOnError(state, "overflow on division or remainder",
                                  Executor::Overflow);
-}
-
-bool SpecialFunctionHandler::isMemory(ExecutionState &state, ref<Expr> address) {
-  ResolutionList rl;
-  state.addressSpace.resolve(state, executor.solver, address, rl);
-  return !rl.empty();
-}
-
-void SpecialFunctionHandler::havocReachableMemory(ExecutionState & state,
-                                                              ref<Expr> address,
-                                                              std::vector<ExecutionState*> &next_states) {
-  static unsigned id = 0;
-  if (!isMemory(state, address)) {
-    next_states.push_back(&state);
-    return;
-  }
-  Executor::ExactResolutionList rl;
-  if (!executor.resolveExact(state, address, rl, "syscall", true)) {
-    // Lookup failed
-    klee_warning("havocReachableMemory: Lookup failed post-test. State destroyed");
-    return;
-  }
-  Executor::ExactResolutionList::iterator it = rl.begin();
-  Executor::ExactResolutionList::iterator ie = rl.end();
-  if (rl.empty()) {
-    // Lookup failed
-    klee_warning("havocReachableMemory: Lookup failed post-test");
-    return;
-  }
-  for (; it != ie; ++it) {
-    const MemoryObject *mo = it->first.first;
-    const ObjectState *os = it->first.second;
-    ExecutionState *s = it->second;
-    next_states.push_back(s);
-    ObjectState *wos = s->addressSpace.getWriteable(mo, os);
-    // TODO(oanson) This possibly can be optimised
-    // TODO(oanson) write from address, not from 0
-    llvm::StringRef name = "syscall/" + llvm::utostr(++id);
-    mo->setName(name);
-    const Array *array = executor.arrayCache.CreateArray(name, mo->size);
-    UpdateList ul(array, 0);
-    for (unsigned offset = 0; offset < mo->size; offset++) {
-      ref<Expr> offsetExpr = ConstantExpr::create(offset, Expr::Int32);
-      ref<Expr> value = ReadExpr::create(ul, offsetExpr);
-      wos->write(offset, value);
-    }
-    s->addSymbolic(mo, array);
-  }
-}
-
-void SpecialFunctionHandler::havocStatesReachableMemory(std::vector<ExecutionState *> &states,
-                                                  ref<Expr> argument,
-                                                  std::vector<ExecutionState*> &next_states) {
-  for (std::vector<ExecutionState*>::iterator vit = states.begin(),
-                                              vie = states.end();
-      vit != vie; vit++) {
-    havocReachableMemory(**vit, argument, next_states);
-  }
-}
-
-void SpecialFunctionHandler::handleSyscall(ExecutionState &state,
-                                           KInstruction *target,
-                                           std::vector<ref<Expr> > &arguments) {
-  static unsigned id = 0;
-  /**
-   * For every state
-   *  For every argument
-   *    IF resolve exact fails: re-add the state and continue
-   *    Else:
-   *      For every 'resolve exact':
-   *        add the state
-   *        make symbolic till end of allocated mem
-   */
-  std::vector<ExecutionState*> states;
-  std::vector<ExecutionState*> next_states;
-  states.push_back(&state);
-  ref<Expr> retval;
-  executor.createSymbolicValue(64,
-                               "syscall retval/" + llvm::utostr(++id),
-                               retval);
-  executor.bindLocal(target, state, retval);
-  for (std::vector<ref<Expr> >::iterator vit = arguments.begin(),
-                                         vie = arguments.end();
-      vit != vie; vit++) {
-    havocStatesReachableMemory(states, *vit, next_states);
-    executor.updateStates(&state);
-    states = next_states;
-    next_states.clear();
-  }
-}
-
-void SpecialFunctionHandler::handleSyscallCP(ExecutionState &state,
-                                           KInstruction *target,
-                                           std::vector<ref<Expr> > &arguments) {
-  arguments.erase(arguments.begin());
-  return handleSyscall(state, target, arguments);
 }

@@ -37,3 +37,5 @@ endif
 ifeq ($(HAVE_ZLIB),1)
   LIBS += -lz
 endif
+
+LIBS += -lyaml-cpp
