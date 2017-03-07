@@ -2684,6 +2684,16 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   }
 }
 
+void Executor::createSymbolicValue(
+		Expr::Width width, llvm::StringRef name,
+		ref<Expr> & result) {
+  static unsigned counter = 0;
+  size_t size = Expr::getMinBytesForWidth(width);
+  const Array *array = arrayCache.CreateArray(name.str(), size);
+  result = Expr::createTempRead(array, width);
+  assert(result.get() && "Failed to create symbolic");
+}
+
 void Executor::updateStates(ExecutionState *current) {
   if (searcher) {
     searcher->update(current, addedStates, removedStates);
@@ -3418,10 +3428,11 @@ void Executor::executeFree(ExecutionState &state,
   }
 }
 
-void Executor::resolveExact(ExecutionState &state,
+bool Executor::resolveExact(ExecutionState &state,
                             ref<Expr> p,
                             ExactResolutionList &results, 
-                            const std::string &name) {
+                            const std::string &name,
+			    bool doNotTerminateState) {
   // XXX we may want to be capping this?
   ResolutionList rl;
   state.addressSpace.resolve(state, solver, p, rl);
@@ -3441,10 +3452,12 @@ void Executor::resolveExact(ExecutionState &state,
       break;
   }
 
-  if (unbound) {
+  if (unbound && !doNotTerminateState) {
     terminateStateOnError(*unbound, "memory error: invalid pointer: " + name,
                           Ptr, NULL, getAddressInfo(*unbound, p));
+    return unbound != &state;
   }
+  return true;
 }
 
 void Executor::executeMemoryOperation(ExecutionState &state,

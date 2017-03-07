@@ -137,7 +137,16 @@ namespace klee {
     HANDLER(handleMulOverflow);
     HANDLER(handleSubOverflow);
     HANDLER(handleDivRemOverflow);
+    HANDLER(handleSyscall);
+    HANDLER(handleSyscallCP);
 #undef HANDLER
+  private:
+
+    bool isMemory(ExecutionState &, ref<Expr>);
+    void havocStatesReachableMemory(std::vector<ExecutionState *> &, ref<Expr>,
+                                    std::vector<ExecutionState*> &);
+    void havocReachableMemory(ExecutionState & , ref<Expr> ,
+                              std::vector<ExecutionState*> &);
   };
 } // End klee namespace
 
