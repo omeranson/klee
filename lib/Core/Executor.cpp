@@ -2706,7 +2706,6 @@ void Executor::createSymbolicValue(
   size_t size = Expr::getMinBytesForWidth(width);
   const Array *array = arrayCache.CreateArray(name.str(), size);
   result = Expr::createTempRead(array, width);
-  assert(result.get() && "Failed to create symbolic");
 }
 
 void Executor::updateStates(ExecutionState *current) {

@@ -64,6 +64,8 @@ void klee::OverApproximation::overApproximate(Executor & executor,
   llvm::StringRef name = rso.str();
   createSymbolicReturnValue(executor, target->inst, name, retval);
   executor.bindLocal(target, state, retval);
+  // TODO Remove
+  state.addConstraint(SleExpr::create(retval, ConstantExpr::create(1024, retval->getWidth())));
 
   if (!writableMemoryArgs) {
     return;
