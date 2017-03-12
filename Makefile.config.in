@@ -84,6 +84,3 @@ CXXFLAGS := @CXXFLAGS@ -g -Wall
 LDFLAGS := @LDFLAGS@ -g
 
 REQUIRES_RTTI := @REQUIRES_RTTI@
-
-YAML_CPP_INCLUDE = /home/oanson/projects/yaml-cpp/include
-YAML_CPP_LIB = /home/oanson/projects/yaml-cpp/build

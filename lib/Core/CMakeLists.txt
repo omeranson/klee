@@ -19,7 +19,6 @@ klee_add_component(kleeCore
   ImpliedValue.cpp
   Memory.cpp
   MemoryManager.cpp
-  OverApproximation.cpp
   PTree.cpp
   Searcher.cpp
   SeedInfo.cpp

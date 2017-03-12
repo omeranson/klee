@@ -117,7 +117,7 @@ public:
     Unhandled
   };
 
-public:
+private:
   static const char *TerminateReasonNames[];
 
   class TimerInfo;
@@ -255,11 +255,10 @@ public:
   /// beginning of.
   typedef std::vector< std::pair<std::pair<const MemoryObject*, const ObjectState*>, 
                                  ExecutionState*> > ExactResolutionList;
-  bool resolveExact(ExecutionState &state,
+  void resolveExact(ExecutionState &state,
                     ref<Expr> p,
                     ExactResolutionList &results,
-                    const std::string &name,
-                    bool doNotTerminateState=false);
+                    const std::string &name);
 
   /// Allocate and bind a new object in a particular state. NOTE: This
   /// function may fork.
@@ -292,11 +291,6 @@ public:
                    ref<Expr> address,
                    KInstruction *target = 0);
   
-  bool isOverApproximated(llvm::Function * f);
-  void overApproximate(ExecutionState &state, 
-                       KInstruction *ki,
-                       llvm::Function *f,
-                       std::vector< ref<Expr> > &arguments);
   void executeCall(ExecutionState &state, 
                    KInstruction *ki,
                    llvm::Function *f,
@@ -441,8 +435,6 @@ public:
   void checkMemoryUsage();
   void printDebugInstructions(ExecutionState &state);
   void doDumpStates();
-
-  void createSymbolicValue(Expr::Width width, llvm::StringRef name, ref<Expr> & result);
 
 public:
   Executor(llvm::LLVMContext &ctx, const InterpreterOptions &opts,

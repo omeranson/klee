@@ -45,7 +45,6 @@
 #include "klee/Internal/Support/ErrorHandling.h"
 #include "klee/Internal/Support/FloatEvaluation.h"
 #include "klee/Internal/Support/ModuleUtil.h"
-#include "klee/Internal/Support/OverApproximation.h"
 #include "klee/Internal/System/Time.h"
 #include "klee/Internal/System/MemoryUsage.h"
 #include "klee/SolverStats.h"
@@ -1326,19 +1325,6 @@ bool Executor::isForcedExternal(std::string & name) {
   return false;
 }
 
-bool Executor::isOverApproximated(Function * f) {
-  OverApproximation & overApprox = OverApproximation::getInstance();
-  return overApprox.isOverApproximated(f);
-}
-
-void Executor::overApproximate(ExecutionState &state, 
-                               KInstruction *ki,
-                               Function *f,
-                               std::vector< ref<Expr> > &arguments) {
-  OverApproximation & overApprox = OverApproximation::getInstance();
-  return overApprox.overApproximate(*this, state, ki, f, arguments);
-}
-
 void Executor::executeCall(ExecutionState &state, 
                            KInstruction *ki,
                            Function *f,
@@ -1346,8 +1332,6 @@ void Executor::executeCall(ExecutionState &state,
   Instruction *i = ki->inst;
   if (f && isForcedExternal(f)) {
       callExternalFunction(state, ki, f, arguments);
-  } else if (f && isOverApproximated(f)) {
-    overApproximate(state, ki, f, arguments);
   } else if (f && f->isDeclaration()) {
     switch(f->getIntrinsicID()) {
     case Intrinsic::not_intrinsic:
@@ -2703,14 +2687,6 @@ void Executor::executeInstruction(ExecutionState &state, KInstruction *ki) {
   }
 }
 
-void Executor::createSymbolicValue(
-		Expr::Width width, llvm::StringRef name,
-		ref<Expr> & result) {
-  size_t size = Expr::getMinBytesForWidth(width);
-  const Array *array = arrayCache.CreateArray(name.str(), size);
-  result = Expr::createTempRead(array, width);
-}
-
 void Executor::updateStates(ExecutionState *current) {
   if (searcher) {
     searcher->update(current, addedStates, removedStates);
@@ -3445,11 +3421,10 @@ void Executor::executeFree(ExecutionState &state,
   }
 }
 
-bool Executor::resolveExact(ExecutionState &state,
+void Executor::resolveExact(ExecutionState &state,
                             ref<Expr> p,
                             ExactResolutionList &results, 
-                            const std::string &name,
-			    bool doNotTerminateState) {
+                            const std::string &name) {
   // XXX we may want to be capping this?
   ResolutionList rl;
   state.addressSpace.resolve(state, solver, p, rl);
@@ -3469,12 +3444,10 @@ bool Executor::resolveExact(ExecutionState &state,
       break;
   }
 
-  if (unbound && !doNotTerminateState) {
+  if (unbound) {
     terminateStateOnError(*unbound, "memory error: invalid pointer: " + name,
                           Ptr, NULL, getAddressInfo(*unbound, p));
-    return unbound != &state;
   }
-  return true;
 }
 
 void Executor::executeMemoryOperation(ExecutionState &state,
