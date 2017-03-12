@@ -20,10 +20,10 @@ namespace llvm {
 }
 
 namespace klee {
- 
   /// Link a module with a specified bitcode archive.
   llvm::Module *linkWithLibrary(llvm::Module *module, 
-                                const std::string &libraryName);
+                                const std::string &libraryName,
+                                bool isOverwrite=false);
 
   /// Return the Function* target of a Call or Invoke instruction, or
   /// null if it cannot be determined (should be only for indirect

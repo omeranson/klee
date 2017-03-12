@@ -1417,6 +1417,9 @@ void Executor::executeCall(ExecutionState &state,
     // instead of the actual instruction, since we can't make a KInstIterator
     // from just an instruction (unlike LLVM).
     KFunction *kf = kmodule->functionMap[f];
+    if (!kf) {
+      klee_error("Cannot find KFunction %s", f->getName().str().c_str());
+    }
     state.pushFrame(state.prevPC, kf);
     state.pc = kf->instructions;
 

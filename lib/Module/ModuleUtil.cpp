@@ -173,6 +173,28 @@ GetAllUndefinedSymbols(Module *M, std::set<std::string> &UndefinedSymbols) {
 }
 
 
+/*! A helper function to Link a module with overriding existing methods
+ */
+unsigned OverrideFromSrc = 1 << 20;
+static bool LinkModules(Module *Dest, Module *Src, unsigned Mode,
+                        std::string *ErrorMsg) {
+  if (Mode & OverrideFromSrc) {
+    // Iterate all function definitions in Src, and remove them from Dest.
+    for (Module::iterator SF = Src->begin(), E = Src->end(); SF != E; ++SF) {
+      if (SF->isDeclaration()) {
+        continue;
+      }
+      Function * DestF = Dest->getFunction(SF->getName());
+      if (DestF && !DestF->isDeclaration()) {
+        DestF->deleteBody();
+      }
+    }
+    Mode &= ~OverrideFromSrc;
+  }
+
+  return Linker::LinkModules(Dest, Src, Linker::DestroySource, ErrorMsg);
+}
+
 /*!  A helper function for linkBCA() which cleans up
  *   memory allocated by that function.
  */
@@ -194,7 +216,7 @@ static void CleanUpLinkBCA(std::vector<Module*> &archiveModules)
  *
  *  \return True if linking succeeds otherwise false
  */
-static bool linkBCA(object::Archive* archive, Module* composite, std::string& errorMessage)
+static bool linkBCA(object::Archive* archive, Module* composite, bool isOverwrite, std::string& errorMessage)
 {
   llvm::raw_string_ostream SS(errorMessage);
   std::vector<Module*> archiveModules;
@@ -318,7 +340,8 @@ static bool linkBCA(object::Archive* archive, Module* composite, std::string& er
               " in " << M->getModuleIdentifier() << "\n");
 
 
-          if (Linker::LinkModules(composite, M, Linker::DestroySource, &errorMessage))
+          unsigned flags = isOverwrite ? OverrideFromSrc : 0;
+          if (LinkModules(composite, M, Linker::DestroySource | flags, &errorMessage))
           {
             // Linking failed
             SS << "Linking archive module with composite failed:" << errorMessage;
@@ -363,7 +386,7 @@ static bool linkBCA(object::Archive* archive, Module* composite, std::string& er
 
 
 Module *klee::linkWithLibrary(Module *module, 
-                              const std::string &libraryName) {
+                              const std::string &libraryName, bool isOverwrite) {
   KLEE_DEBUG_WITH_TYPE("klee_linker", dbgs() << "Linking file " << libraryName << "\n");
 #if LLVM_VERSION_CODE >= LLVM_VERSION(3, 3)
   if (!sys::fs::exists(libraryName)) {
@@ -387,7 +410,8 @@ Module *klee::linkWithLibrary(Module *module,
     Result = ParseBitcodeFile(Buffer.get(), Context, &ErrorMessage);
 
 
-    if (!Result || Linker::LinkModules(module, Result, Linker::DestroySource,
+    unsigned flags = isOverwrite ? OverrideFromSrc : 0;
+    if (!Result || LinkModules(module, Result, Linker::DestroySource | flags,
         &ErrorMessage))
       klee_error("Link with library %s failed: %s", libraryName.c_str(),
           ErrorMessage.c_str());
@@ -402,7 +426,7 @@ Module *klee::linkWithLibrary(Module *module,
 
     if (object::Archive *a = dyn_cast<object::Archive>(arch.get())) {
       // Handle in helper
-      if (!linkBCA(a, module, ErrorMessage))
+      if (!linkBCA(a, module, isOverwrite, ErrorMessage))
         klee_error("Link with library %s failed: %s", libraryName.c_str(),
             ErrorMessage.c_str());
     }

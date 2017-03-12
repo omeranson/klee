@@ -205,6 +205,11 @@ namespace {
 		cl::desc("Link the given libraries before execution"),
 		cl::value_desc("library file"));
 
+  cl::opt<std::string>
+  StubsLibrary("link-stubs-llvm-lib",
+    cl::desc("Linke the given library before execution, overriding the methods"
+             " within if they already exist"),
+		cl::value_desc("library file"));
   cl::opt<unsigned>
   MakeConcreteSymbolic("make-concrete-symbolic",
                        cl::desc("Probabilistic rate at which to make concrete reads symbolic, "
@@ -1333,6 +1338,9 @@ int main(int argc, char **argv, char **envp) {
     const char * libFilename = libs_it->c_str();
     klee_message("Linking in library: %s.\n", libFilename);
     mainModule = klee::linkWithLibrary(mainModule, libFilename);
+  }
+  if (StubsLibrary != "") {
+    mainModule = klee::linkWithLibrary(mainModule, StubsLibrary, true);
   }
   // Get the desired main function.  klee_main initializes uClibc
   // locale and other data and then calls main.
