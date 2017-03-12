@@ -11,8 +11,6 @@ ssize_t write(int fd, const void *buf, size_t count) {
 		buffer[count] = '\0';
 		klee_warning(buffer);
 	}
-	int retval = klee_int(__FUNCTION__);
 	// TODO Set errno?
-	klee_assume((retval <= count) || (retval == -1));
-	return retval;
+	return klee_range(-1, count+1, __FUNCTION__);
 }

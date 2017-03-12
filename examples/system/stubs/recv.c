@@ -8,8 +8,6 @@
 
 ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
 	HAVOC_SIZE(buf, len);
-	ssize_t retval;
-	klee_make_symbolic(&retval, sizeof(retval), __FUNCTION__);
-	klee_assume(retval <= len);
-	return retval;
+	// TODO Set errno?
+	return klee_range(-1, len+1, __FUNCTION__);
 }

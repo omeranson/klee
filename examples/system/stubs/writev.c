@@ -11,17 +11,15 @@ ssize_t writev(int fd, const struct iovec *iov, int iovcnt) {
 		total += iov[idx].iov_len;
 	}
 	if ((fd == 1) || (fd == 2)) {
-		char * buffer = (char*)alloca(total+1);
-		char * p = buffer;
-		for (idx = 0; idx < iovcnt; idx++) {
-			memcpy(p, iov[idx].iov_base, iov[idx].iov_len);
-			p += iov[idx].iov_len;
-		}
-		p[0] = '\0';
-		klee_warning(buffer);
+		//char * buffer = (char*)alloca(total+1);
+		//char * p = buffer;
+		//for (idx = 0; idx < iovcnt; idx++) {
+		//	memcpy(p, iov[idx].iov_base, iov[idx].iov_len);
+		//	p += iov[idx].iov_len;
+		//}
+		//p[0] = '\0';
+		//klee_warning(buffer);
 	}
-	int retval = klee_int(__FUNCTION__);
 	// TODO Set errno?
-	klee_assume((retval <= total) || (retval == -1));
-	return retval;
+	return klee_range(-1, total+1, __FUNCTION__);
 }

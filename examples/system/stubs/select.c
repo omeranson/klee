@@ -17,8 +17,6 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 	if (exceptfds) {
 		HAVOC(exceptfds);
 	}
-	int retval = klee_int(__FUNCTION__);
-	klee_assume(retval <= nfds);
-	klee_assume(retval >= -1);
-	return retval;
+	// TODO Set errno?
+	return klee_range(-1, nfds, __FUNCTION__);
 }

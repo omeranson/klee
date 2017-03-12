@@ -15,7 +15,7 @@ LD=musl-clang
 
 OBJS=$(foreach f,${BASE},${f}.o)
 BC_OBJS=$(foreach f,${BASE},.${f}.o.bc)
-ALL=stubs.bc
+ALL=stubs.so.bc
 
 all: ${ALL}
 
@@ -28,7 +28,7 @@ all: ${ALL}
 stubs.so: ${OBJS}
 	${LD} -shared -o $@ ${OBJS}
 
-%.bc: %.so
+%.bc: %
 	extract-bc $^
 
 %.ll: %.bc

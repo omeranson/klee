@@ -4,8 +4,6 @@
 #include <klee/klee.h>
 
 int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
-	int retval = klee_int(__FUNCTION__);
 	// TODO Set errno?
-	klee_assume((retval == 0) || (retval == -1));
-	return retval;
+	return klee_range(-1, 1, __FUNCTION__);
 }
