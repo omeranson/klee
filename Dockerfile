@@ -16,7 +16,9 @@ ENV LLVM_VERSION=3.4 \
     BUILD_DIR=/home/klee/klee_build \
     USE_CMAKE=1 \
     ASAN_BUILD=0 \
-    UBSAN_BUILD=0
+    UBSAN_BUILD=0 \
+    PROJECTS_DIR=/home/klee/projects \
+    KLEE_ENV_DIR=/home/klee/opt/klee-env
 
 RUN apt-get update && \
     apt-get -y --no-install-recommends install \
@@ -132,3 +134,19 @@ RUN [ "X${USE_CMAKE}" != "X1" ] && \
 # Link klee to the libkleeRuntest library needed by docker run
 RUN [ "X${USE_CMAKE}" != "X1" ] && (ln -s ${BUILD_DIR}/klee/Release+Asserts/lib/libkleeRuntest.so /usr/lib/libkleeRuntest.so.1.0) || echo "Skipping hack"
 USER klee
+
+RUN mkdir -p ${PROJECTS_DIR}
+# Download wllvm
+RUN cd ${PROJECTS_DIR} && git clone https://github.com/omeranson/whole-program-llvm -b klee
+
+# Install initial environment
+RUN mkdir ${KLEE_ENV_DIR}
+RUN cp -r ${KLEE_SRC}/contrib/klee_env/* ${KLEE_ENV_DIR}/
+
+# Download, compile, and install MUSL
+RUN cd ${PROJECTS_DIR} && git clone https://github.com/omeranson/musl -b klee
+RUN cd ${PROJECTS_DIR} && WLLVM_CONFIGURE_ONLY=1 ./configure --prefix=${KLEE_ENV_DIR}
+RUN cd ${PROJECTS_DIR} && make
+RUN cd ${PROJECTS_DIR} && make install
+
+RUN echo ". ${KLEE_ENV_DIR}/bin/set-env-musl.sh" >> .bashrc
