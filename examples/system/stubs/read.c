@@ -4,7 +4,10 @@
 
 #include <klee/klee.h>
 
-ssize_t write(int fd, const void *buf, size_t count) {
+#include "stubs_helper_macros.h"
+
+ssize_t read(int fd, void *buf, size_t count) {
+	HAVOC_SIZE(buf, count);
 	// TODO Set errno?
 	return klee_range(-1, count+1, __FUNCTION__);
 }

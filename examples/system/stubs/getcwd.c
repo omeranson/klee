@@ -4,15 +4,14 @@
 
 #include <klee/klee.h>
 
+#include "stubs_helper_macros.h"
+
 char *getcwd(char *buf, size_t size) {
 	if (!buf) {
-		char * _buf = malloc(size);
-		klee_make_symbolic(_buf, sizeof(_buf), "getcwd");
-		return _buf;
-	} else {
-		char * temp = alloca(size);
-		klee_make_symbolic(temp, size, "getcwd");
-		memcpy(buf, temp, size);
+		HAVOC_SIZE(buf, size);
 		return buf;
 	}
+	char * _buf = malloc(size);
+	klee_make_symbolic(_buf, size, __FUNCTION__);
+	return _buf;
 }
