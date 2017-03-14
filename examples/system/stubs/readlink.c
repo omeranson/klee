@@ -1,3 +1,4 @@
+#include <alloca.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -7,6 +8,6 @@
 
 ssize_t readlink(const char *pathname, char *buf, size_t bufsiz) {
 	strlen(pathname);
-	HAVOC(buf, bufsiz);
+	HAVOC_SIZE(buf, bufsiz);
 	return klee_range(-1, bufsiz, __FUNCTION__);
 }

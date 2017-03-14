@@ -7,11 +7,11 @@
 #include "stubs_helper_macros.h"
 
 char *getcwd(char *buf, size_t size) {
+	klee_warning("getcwd stub");
 	if (!buf) {
-		HAVOC_SIZE(buf, size);
-		return buf;
+		buf = malloc(size);
 	}
-	char * _buf = malloc(size);
-	klee_make_symbolic(_buf, size, __FUNCTION__);
-	return _buf;
+	HAVOC_SIZE(buf, size-1);
+	buf[size-1] = '\0';
+	return buf;
 }

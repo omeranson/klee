@@ -1,3 +1,5 @@
+#include <alloca.h>
+#include <string.h>
 #include <sys/socket.h>
 
 #include <klee/klee.h>

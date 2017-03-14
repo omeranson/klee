@@ -8,9 +8,10 @@ void syslog(int priority, const char *format, ...)  {
 	char buffer2[1044];
 	va_list vl;
 	va_start(vl, format);
-	vsnprintf(buffer, sizeof(buffer), vl);
+	vsnprintf(buffer, sizeof(buffer), format, vl);
 	va_end(vl);
-	snprintf(buffer2, sizeof(buffer2), "syslog: priority %d: %s", buffer);
+	snprintf(buffer2, sizeof(buffer2), "syslog: priority %d: %s",
+			priority, buffer);
 
 	klee_warning(buffer2);
 }

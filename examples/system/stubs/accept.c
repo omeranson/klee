@@ -12,7 +12,7 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 		if (*addrlen > 1024) {
 			klee_warning("recvfrom: *addrlen can be very big");
 		}
-		HAVOC_SIZE(*addrlen);
+		HAVOC_SIZE(addr, *addrlen);
 		*addrlen = klee_int(__FUNCTION__);
 	}
 	// TODO Set errno?

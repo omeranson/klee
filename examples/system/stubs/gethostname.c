@@ -1,4 +1,6 @@
 // XXX Should model uname, but this is easier
+#include <alloca.h>
+#include <string.h>
 
 #include <klee/klee.h>
 

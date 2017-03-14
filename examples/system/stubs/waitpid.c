@@ -1,3 +1,5 @@
+#include <alloca.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
