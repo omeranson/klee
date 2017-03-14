@@ -3,6 +3,9 @@ Release+Asserts/
 Debug/
 Debug+Asserts/
 Output/
+examples/system/stubs/*.o
+examples/system/stubs/.*.bc
+examples/system/stubs/stubs.so*
 
 cscope.*
 *~
