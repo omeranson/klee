@@ -207,9 +207,14 @@ namespace {
 
   cl::opt<std::string>
   StubsLibrary("link-stubs-llvm-lib",
-    cl::desc("Linke the given library before execution, overriding the methods"
+    cl::desc("Link the given library before execution, overriding the methods"
              " within if they already exist"),
 		cl::value_desc("library file"));
+
+  cl::opt<bool>
+  TrimUnreachable("trim-unreachable-functions",
+    cl::desc("Remove functions that are unreachable from the main function"));
+
   cl::opt<unsigned>
   MakeConcreteSymbolic("make-concrete-symbolic",
                        cl::desc("Probabilistic rate at which to make concrete reads symbolic, "
@@ -1165,6 +1170,82 @@ static llvm::Module *linkWithUclibc(llvm::Module *mainModule, StringRef libDir) 
 }
 #endif
 
+void populateUses(std::map<Function*, std::set<Function *> > & uses, Value * v, Function * f) {
+  for (llvm::Value::use_iterator uit = v->use_begin(), uie = v->use_end();
+		uit != uie; uit++) {
+	llvm::User * user = *uit;
+	if (llvm::Instruction * inst = dyn_cast<llvm::Instruction>(user)) {
+		BasicBlock * bb = inst->getParent();
+		Function * parentFunc = bb->getParent();
+		uses[parentFunc].insert(f);
+	} else {
+		populateUses(uses, user, f);
+	}
+  }
+}
+
+void trimUnusedFunctions(KleeHandler * handler,
+		Module * module, Function * entrypoint) {
+	// Construct map function -> used functions
+	// set <- {entrypoint}
+	// reachable <- {entrypoint}
+	// for each f in set:
+	// 	set += (map[f] - reachable)
+	// 	reachable += map[f]
+	// 	set -= {entrypoint}
+	// For each function in module,
+	// 	if function not in reachable
+	// 		erase
+	std::map<Function*, std::set<Function *> > uses;
+	for (Module::iterator fit = module->begin(), fie = module->end();
+			fit != fie; fit++) {
+		Function * f = fit;
+		populateUses(uses, f, f);
+	}
+
+	std::set<Function *> unvisited;
+	unvisited.insert(entrypoint);
+	std::set<Function *> reachable;
+	reachable.insert(entrypoint);
+	while (!unvisited.empty()) {
+		Function * f = *unvisited.begin();
+		unvisited.erase(unvisited.begin());
+		std::set<Function *> & directReachable = uses[f];
+		std::vector<Function *> newFuncs;
+		std::set_difference(directReachable.begin(), directReachable.end(),
+				reachable.begin(), reachable.end(),
+				std::back_insert_iterator<std::vector<Function *> >(
+						newFuncs));
+		unvisited.insert(newFuncs.begin(), newFuncs.end());
+		reachable.insert(directReachable.begin(), directReachable.end());
+	}
+	for (Module::iterator fit = module->begin(), fie = module->end();
+			fit != fie; fit++) {
+		Function * f = fit;
+		if (f && (!reachable.count(f))) {
+			f->deleteBody();
+		}
+	}
+
+	llvm::raw_fd_ostream & reachabilityStream = *handler->openOutputFile(
+			"reachability.dot");
+	reachabilityStream << "digraph {\n";
+	for (std::set<Function *>::iterator fit = reachable.begin(), fie = reachable.end();
+			fit != fie; fit++) {
+		Function * f = *fit;
+		std::set<Function *> & directReachable = uses[f];
+		for (std::set<Function*>::iterator vit = directReachable.begin(),
+		                                   vie = directReachable.end();
+				vit != vie; vit++) {
+			reachabilityStream << "\t" << f->getName() << " -> "
+					<< (*vit)->getName() << "\n";
+		}
+	}
+	reachabilityStream << "}";
+	delete &reachabilityStream;
+
+}
+
 int main(int argc, char **argv, char **envp) {
   atexit(llvm_shutdown);  // Call llvm_shutdown() on exit.
 
@@ -1400,6 +1481,12 @@ int main(int argc, char **argv, char **envp) {
   Interpreter *interpreter =
     theInterpreter = Interpreter::create(ctx, IOpts, handler);
   handler->setInterpreter(interpreter);
+
+  // Trim mainModules to only things syntactically reachable from mainFn
+  if (TrimUnreachable) {
+	  trimUnusedFunctions(handler, mainModule, mainFn);
+  }
+
 
   for (int i=0; i<argc; i++) {
     handler->getInfoStream() << argv[i] << (i+1<argc ? " ":"\n");
