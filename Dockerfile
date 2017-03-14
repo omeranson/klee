@@ -140,13 +140,15 @@ RUN mkdir -p ${PROJECTS_DIR}
 RUN cd ${PROJECTS_DIR} && git clone https://github.com/omeranson/whole-program-llvm -b klee
 
 # Install initial environment
-RUN mkdir ${KLEE_ENV_DIR}
-RUN cp -r ${KLEE_SRC}/contrib/klee_env/* ${KLEE_ENV_DIR}/
+RUN mkdir -p ${KLEE_ENV_DIR}
+RUN cp -r ${KLEE_SRC}/contrib/klee-env/* ${KLEE_ENV_DIR}/
 
 # Download, compile, and install MUSL
 RUN cd ${PROJECTS_DIR} && git clone https://github.com/omeranson/musl -b klee
-RUN cd ${PROJECTS_DIR} && WLLVM_CONFIGURE_ONLY=1 ./configure --prefix=${KLEE_ENV_DIR}
-RUN cd ${PROJECTS_DIR} && make
-RUN cd ${PROJECTS_DIR} && make install
+RUN cd ${PROJECTS_DIR}/musl && . ${KLEE_ENV_DIR}/bin/set-env-nostdlibc.sh && WLLVM_CONFIGURE_ONLY=1 ./configure --prefix=${KLEE_ENV_DIR}
+RUN cd ${PROJECTS_DIR}/musl && . ${KLEE_ENV_DIR}/bin/set-env-nostdlibc.sh && make
+RUN cd ${PROJECTS_DIR}/musl && . ${KLEE_ENV_DIR}/bin/set-env-nostdlibc.sh && make install
+RUN cd ${KLEE_ENV_DIR}/lib && . ${KLEE_ENV_DIR}/bin/set-env-nostdlibc.sh && extract-bc libc.so
+RUN ln -s ld.musl-clang ${KLEE_ENV_DIR}/bin/ld
 
 RUN echo ". ${KLEE_ENV_DIR}/bin/set-env-musl.sh" >> .bashrc
