@@ -228,9 +228,11 @@ int kTest_toFile(KTest *bo, const char *path) {
       fprintf(stderr, "Failed to write object length %d %s: %s\n", i, o->name, strerror(errno));
       goto error;
     }
-    if (fwrite(o->bytes, o->numBytes, 1, f)!=1) {
-      fprintf(stderr, "Failed to write object data %d %s: %s\n", i, o->name, strerror(errno));
-      goto error;
+    if (o->numBytes != 0) {
+      if (fwrite(o->bytes, o->numBytes, 1, f)!=1) {
+        fprintf(stderr, "Failed to write object data %d %s (ptr: %x, num: %d): %s\n", i, o->name, o->bytes, o->numBytes, strerror(errno));
+        goto error;
+      }
     }
   }
 
