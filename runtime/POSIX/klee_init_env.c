@@ -209,3 +209,8 @@ usage: (klee_init_env) [options] [program arguments]\n\
                 save_all_writes_flag, fd_fail);
 }
 
+void __attribute__((weak)) klee_init_fds(unsigned n_files, unsigned file_length,
+                   unsigned stdin_length, int sym_stdout_flag,
+                   int save_all_writes_flag, unsigned max_failures) {
+	// Do nothing!
+}
