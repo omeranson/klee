@@ -7,7 +7,6 @@
 #include "stubs_helper_macros.h"
 
 char *getcwd(char *buf, size_t size) {
-	klee_warning("getcwd stub");
 	if (!buf) {
 		buf = malloc(size);
 	}
