@@ -1,4 +1,5 @@
 #include <alloca.h>
+#include <errno.h>
 #include <string.h>
 #include <sys/select.h>
 
@@ -17,6 +18,6 @@ int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
 	if (exceptfds) {
 		HAVOC(exceptfds);
 	}
-	// TODO Set errno?
+	errno = klee_int(__FUNCTION__);
 	return klee_range(-1, nfds, __FUNCTION__);
 }

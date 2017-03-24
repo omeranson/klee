@@ -1,4 +1,5 @@
 #include <alloca.h>
+#include <errno.h>
 #include <string.h>
 #include <sys/types.h>
 
@@ -8,6 +9,6 @@
 
 ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
 	HAVOC_SIZE(buf, len);
-	// TODO Set errno?
+	errno = klee_int(__FUNCTION__);
 	return klee_range(-1, len+1, __FUNCTION__);
 }

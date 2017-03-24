@@ -1,4 +1,5 @@
 #include <alloca.h>
+#include <errno.h>
 #include <string.h>
 #include <time.h>
 
@@ -9,6 +10,6 @@
 int clock_gettime(clockid_t clk_id, struct timespec *tp) {
 	HAVOC(tp);
 
-	// TODO Set errno?
+	errno = klee_int(__FUNCTION__);
 	return klee_range(-1, 1, __FUNCTION__);
 }

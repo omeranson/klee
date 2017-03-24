@@ -10,6 +10,12 @@
 	memcpy(dest, temp, size); \
 } while (0)
 
+#define HAVOC_NEW_STRING_SIZE(dest, size) do { \
+	char * __result = malloc(size); \
+	klee_make_symbolic(__result, size, __FUNCTION__); \
+	__result[size-1] = '\0'; \
+	dest = __result; \
+} while (0)
 /*
 #define RETURN_VALUES_EXPAND_OPTIONS(arg, ...) \
 	(retval == arg) || RETURN_VALUES_EXPAND_OPTIONS(__VA_ARGS__)

@@ -1,9 +1,10 @@
+#include <errno.h>
 #include <string.h>
 
 #include <klee/klee.h>
 
 int chdir(const char *path) {
 	strlen(path); // Verify path is readable till NUL terminator
-	// TODO Set errno?
+	errno = klee_int(__FUNCTION__);
 	return klee_range(-1, 1, __FUNCTION__);
 }

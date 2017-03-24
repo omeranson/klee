@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 
@@ -12,6 +13,7 @@ ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags) {
 	for (idx = 0; idx < iovcnt; idx++) {
 		total += iov[idx].iov_len;
 	}
+	errno = klee_int(__FUNCTION__);
 	return klee_range(-1, total+1, __FUNCTION__);
 }
 

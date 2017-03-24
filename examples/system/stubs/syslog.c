@@ -4,6 +4,7 @@
 #include <klee/klee.h>
 
 void syslog(int priority, const char *format, ...)  {
+	/*
 	char buffer[1024];
 	char buffer2[1044];
 	va_list vl;
@@ -14,4 +15,5 @@ void syslog(int priority, const char *format, ...)  {
 			priority, buffer);
 
 	klee_warning(buffer2);
+	*/
 }

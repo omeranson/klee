@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <time.h>
 
 #include <klee/klee.h>
@@ -8,5 +9,6 @@ time_t time(time_t *t) {
 	if (t) {
 		*t = result;
 	}
+	errno = klee_int(__FUNCTION__);
 	return result;
 }

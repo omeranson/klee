@@ -1,4 +1,5 @@
 #include <alloca.h>
+#include <errno.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -15,6 +16,6 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 		HAVOC_SIZE(addr, *addrlen);
 		*addrlen = klee_int(__FUNCTION__);
 	}
-	// TODO Set errno?
+	errno = klee_int(__FUNCTION__);
 	return klee_range(-1, 1024, __FUNCTION__);
 }

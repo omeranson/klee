@@ -1,4 +1,5 @@
 #include <alloca.h>
+#include <errno.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -19,6 +20,6 @@ ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
 		}
 		*addrlen = klee_int(__FUNCTION__);
 	}
-	// TODO Set errno?
+	errno = klee_int(__FUNCTION__);
 	return klee_range(-1, len+1, __FUNCTION__);
 }

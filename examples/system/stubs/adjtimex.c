@@ -1,4 +1,5 @@
 #include <alloca.h>
+#include <errno.h>
 #include <string.h>
 #include <sys/timex.h>
 
@@ -8,6 +9,6 @@
 
 int adjtimex(struct timex *buf) {
 	HAVOC(buf);
-	// int retval = klee_int("adjtimex retval");
-	return 0; // TODO Error code?
+	errno = klee_int(__FUNCTION__);
+	return klee_range(-1, 1, __FUNCTION__);
 }

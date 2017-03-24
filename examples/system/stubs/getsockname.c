@@ -1,4 +1,5 @@
 #include <alloca.h>
+#include <errno.h>
 #include <string.h>
 #include <sys/socket.h>
 
@@ -7,6 +8,7 @@
 #include "stubs_helper_macros.h"
 
 int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
+	errno = klee_int(__FUNCTION__);
 	HAVOC_SIZE(addr, *addrlen);
 	*addrlen = klee_int(__FUNCTION__);
 	return klee_range(-1, 1, __FUNCTION__);

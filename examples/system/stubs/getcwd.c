@@ -1,4 +1,5 @@
 #include <alloca.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -12,5 +13,6 @@ char *getcwd(char *buf, size_t size) {
 	}
 	HAVOC_SIZE(buf, size-1);
 	buf[size-1] = '\0';
+	errno = klee_int(__FUNCTION__); // TODO Return NULL?
 	return buf;
 }
