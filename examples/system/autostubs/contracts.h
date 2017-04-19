@@ -13,8 +13,8 @@ typedef unsigned char bool;
 #define assume(p) if (!p) klee_silent_exit(p)
 //uintptr_t SE_size_obj(void * buf);
 //uintptr_t SE_base_obj(void * buf);
-#define SE_size_obj(buf) sizeof(int)
-#define SE_base_obj(buf) (uintptr_t)buf
+#define SE_size_obj(buf) klee_get_obj_size(buf)
+#define SE_base_obj(buf) klee_get_obj_base(buf)
 
 #include "stubs_helper_macros.h"
 

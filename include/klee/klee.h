@@ -77,6 +77,8 @@ extern "C" {
   
   /* called by checking code to get size of memory. */
   size_t klee_get_obj_size(void *ptr);
+  size_t klee_get_obj_base(void *ptr);
+  size_t klee_get_obj_offset(void *ptr);
   
   /* print the tree associated w/ a given expression. */
   void klee_print_expr(const char *msg, ...);

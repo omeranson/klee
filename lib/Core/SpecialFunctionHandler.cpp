@@ -101,6 +101,8 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_get_value_i64", handleGetValue, true),
   add("klee_define_fixed_object", handleDefineFixedObject, false),
   add("klee_get_obj_size", handleGetObjSize, true),
+  add("klee_get_obj_base", handleGetObjBase, true),
+  add("klee_get_obj_offset", handleGetObjOffset, true),
   add("klee_get_errno", handleGetErrno, true),
   add("klee_is_symbolic", handleIsSymbolic, true),
   add("klee_make_symbolic", handleMakeSymbolic, false),
@@ -546,13 +548,45 @@ void SpecialFunctionHandler::handleGetObjSize(ExecutionState &state,
          "invalid number of arguments to klee_get_obj_size");
   Executor::ExactResolutionList rl;
   executor.resolveExact(state, arguments[0], rl, "klee_get_obj_size");
-  for (Executor::ExactResolutionList::iterator it = rl.begin(), 
+  for (Executor::ExactResolutionList::iterator it = rl.begin(),
          ie = rl.end(); it != ie; ++it) {
     executor.bindLocal(
         target, *it->second,
         ConstantExpr::create(it->first.first->size,
                              executor.kmodule->targetData->getTypeSizeInBits(
                                  target->inst->getType())));
+  }
+}
+
+void SpecialFunctionHandler::handleGetObjBase(ExecutionState &state,
+                                  KInstruction *target,
+                                  std::vector<ref<Expr> > &arguments) {
+  // XXX should type check args
+  assert(arguments.size()==1 &&
+         "invalid number of arguments to klee_get_obj_base");
+  Executor::ExactResolutionList rl;
+  executor.resolveExact(state, arguments[0], rl, "klee_get_obj_base");
+  for (Executor::ExactResolutionList::iterator it = rl.begin(),
+         ie = rl.end(); it != ie; ++it) {
+    const MemoryObject* mo = it->first.first;
+    ExecutionState * s = it->second;
+    executor.bindLocal(target, *s, mo->getBaseExpr());
+  }
+}
+
+void SpecialFunctionHandler::handleGetObjOffset(ExecutionState &state,
+                                  KInstruction *target,
+                                  std::vector<ref<Expr> > &arguments) {
+  // XXX should type check args
+  assert(arguments.size()==1 &&
+         "invalid number of arguments to klee_get_obj_offset");
+  Executor::ExactResolutionList rl;
+  executor.resolveExact(state, arguments[0], rl, "klee_get_obj_offset");
+  for (Executor::ExactResolutionList::iterator it = rl.begin(),
+         ie = rl.end(); it != ie; ++it) {
+    const MemoryObject* mo = it->first.first;
+    ExecutionState * s = it->second;
+    executor.bindLocal(target, *s, mo->getOffsetExpr(arguments[0]));
   }
 }
 
