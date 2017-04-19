@@ -9,7 +9,9 @@ i64 getrandom(char * buf, i32 s, i32 f) {
 	int idx;
 	// Preconditions
 	// Error state for buf:
-	assert(!(1 && (-1 + 1 * s + -1 * size(buf) >= 0) && (0 + 1 * s + 0 * size(buf) >= 0) && (4095 + 0 * s + -1 * size(buf) >= 0)) && "Invalid pointer buf");
+	if(SE_SAT((1 && (-1 + 1 * s + -1 * size(buf) >= 0) && (0 + 1 * s + 0 * size(buf) >= 0) && (4095 + 0 * s + -1 * size(buf) >= 0)))) {
+		warn("Invalid pointer buf");
+	}
 	// Modifications
 	// Modification for buf:
 	i64 last(buf, write);
@@ -21,7 +23,7 @@ i64 getrandom(char * buf, i32 s, i32 f) {
 	HAVOC(b);
 	HAVOC(res);
 	if (b && (0 + 0 * res + 1 * s >= 0) && (5 + 1 * res + 0 * s >= 0) && (0 + -1 * res + 1 * s >= 0)) {
-			return res;
+		return res;
 	}
 	assume(0);
 	return 0; // Unreachable
