@@ -9,10 +9,10 @@ typedef long i32;
 typedef unsigned char bool;
 
 #define size(buf) __size__##buf
-#define offset(buf) __offset__##buf
+#define offset(ptr,buf) __offset__##ptr##__to__##buf
 #define last(buf,op) __last__##buf##__##op
 
-#define assume(p) if (!p) klee_silent_exit(p)
+#define assume(p) if (!(p)) klee_silent_exit(p)
 #define warn(msg) klee_report_error(__FILE__, __LINE__, msg, "contract")
 //uintptr_t SE_size_obj(void * buf);
 //uintptr_t SE_base_obj(void * buf);

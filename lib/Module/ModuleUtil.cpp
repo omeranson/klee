@@ -172,6 +172,15 @@ GetAllUndefinedSymbols(Module *M, std::set<std::string> &UndefinedSymbols) {
                        dbgs() << "*** Finished computing undefined symbols ***\n");
 }
 
+static void OverrideFunction(Module *Dest, Module *Src, Function * Func) {
+      if (Func->isDeclaration()) {
+        return;
+      }
+      Function * DestF = Dest->getFunction(Func->getName());
+      if (DestF && !DestF->isDeclaration()) {
+        DestF->deleteBody();
+      }
+}
 
 /*! A helper function to Link a module with overriding existing methods
  */
@@ -181,12 +190,13 @@ static bool LinkModules(Module *Dest, Module *Src, unsigned Mode,
   if (Mode & OverrideFromSrc) {
     // Iterate all function definitions in Src, and remove them from Dest.
     for (Module::iterator SF = Src->begin(), E = Src->end(); SF != E; ++SF) {
-      if (SF->isDeclaration()) {
-        continue;
-      }
-      Function * DestF = Dest->getFunction(SF->getName());
-      if (DestF && !DestF->isDeclaration()) {
-        DestF->deleteBody();
+      OverrideFunction(Dest, Src, SF);
+    }
+    for (Module::alias_iterator SA = Src->alias_begin(), E = Src->alias_end(); SA != E; ++SA) {
+      GlobalValue * gva = SA->getAliasedGlobal();
+      Function * SF = llvm::dyn_cast<Function>(gva);
+      if (SF) {
+        OverrideFunction(Dest, Src, SF);
       }
     }
     Mode &= ~OverrideFromSrc;
