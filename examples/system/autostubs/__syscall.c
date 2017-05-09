@@ -11,7 +11,7 @@ typedef long (*syscall_sig)(long number, ...);
 
 long __syscall(long number, ...) {
 	va_list args;
-	va_start(number, args);
+	va_start(args, number);
 	long result;
 	switch (number) {
 	case SYS_read:
@@ -1002,7 +1002,7 @@ long __syscall(long number, ...) {
 
 long syscall(long number, ...) {
 	va_list args;
-	va_start(number, args);
+	va_start(args, number);
 	long result;
 	switch (number) {
 	case SYS_read:
