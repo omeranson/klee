@@ -4,16 +4,11 @@
 #include <klee/klee.h>
 
 #define HAVOC(dest) do { \
-	void * temp = alloca(sizeof(dest)); \
-	klee_make_symbolic(temp, sizeof(dest), #dest); \
-	memcpy(&dest, temp, sizeof(dest)); \
+	klee_make_symbolic(&dest, sizeof(dest), #dest); \
 } while (0)
 
 #define HAVOC_SIZE(dest, size) do { \
-	unsigned capacity = SE_size_obj(dest) - ((uintptr_t)dest - SE_base_obj(dest)); \
-	void * temp = alloca(capacity); \
-	klee_make_symbolic(temp, capacity, #dest); \
-	memcpy(dest, temp, size); \
+	klee_make_symbolic(SE_base_obj(dest), SE_size_obj(dest), #dest); \
 } while (0)
 
 #define HAVOC_NEW_STRING_SIZE(dest, size) do { \
