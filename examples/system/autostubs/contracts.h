@@ -16,11 +16,9 @@ typedef unsigned char bool;
 
 #define assume(p) if (!(p)) klee_silent_exit(p)
 #define warn(msg) klee_report_error(__FILE__, __LINE__, msg, "contract")
-//uintptr_t SE_size_obj(void * buf);
-//uintptr_t SE_base_obj(void * buf);
-#define SE_size_obj(buf) klee_get_obj_size(buf)
-#define SE_base_obj(buf) klee_get_obj_base(buf)
-int SE_SAT(cond) {
+#define SE_size_obj(buf) (buf ? klee_get_obj_size(klee_get_obj_base(buf)) : 0)
+#define SE_base_obj(buf) (buf ? klee_get_obj_base(buf) : 0)
+static inline int SE_SAT(cond) {
 	char b;
 	klee_make_symbolic(&b, sizeof(b), "SE_SAT");
 	if (b) {

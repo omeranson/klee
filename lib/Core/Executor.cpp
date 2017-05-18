@@ -3450,6 +3450,36 @@ void Executor::resolveExact(ExecutionState &state,
   }
 }
 
+void Executor::resolveIn(ExecutionState & state,
+                         ref<Expr> p,
+			 ExactResolutionList &results,
+			 const std::string &name) {
+  ResolutionList rl;
+  state.addressSpace.resolve(state, solver, p, rl);
+
+  ExecutionState *unbound = &state;
+  for (ResolutionList::iterator it = rl.begin(), ie = rl.end();
+       it != ie; ++it) {
+    // p >= it->first->getBaseExpr() AND p <= it->first
+    const MemoryObject *mo = it->first;
+    ref<Expr> inBounds = mo->getBoundsCheckPointer(p);
+
+    StatePair branches = fork(*unbound, inBounds, true);
+
+    if (branches.first)
+      results.push_back(std::make_pair(*it, branches.first));
+
+    unbound = branches.second;
+    if (!unbound) // Fork failure or provably in bounds
+      break;
+  }
+
+  if (unbound) {
+    terminateStateOnError(*unbound, "memory error: invalid pointer: " + name,
+                          Ptr, NULL, getAddressInfo(*unbound, p));
+  }
+}
+
 void Executor::executeMemoryOperation(ExecutionState &state,
                                       bool isWrite,
                                       ref<Expr> address,

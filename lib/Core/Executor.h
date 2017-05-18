@@ -260,6 +260,12 @@ private:
                     ExactResolutionList &results,
                     const std::string &name);
 
+  void resolveIn(ExecutionState &state,
+                    ref<Expr> p,
+                    ExactResolutionList &results,
+                    const std::string &name);
+
+
   /// Allocate and bind a new object in a particular state. NOTE: This
   /// function may fork.
   ///

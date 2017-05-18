@@ -565,7 +565,7 @@ void SpecialFunctionHandler::handleGetObjBase(ExecutionState &state,
   assert(arguments.size()==1 &&
          "invalid number of arguments to klee_get_obj_base");
   Executor::ExactResolutionList rl;
-  executor.resolveExact(state, arguments[0], rl, "klee_get_obj_base");
+  executor.resolveIn(state, arguments[0], rl, "klee_get_obj_base");
   for (Executor::ExactResolutionList::iterator it = rl.begin(),
          ie = rl.end(); it != ie; ++it) {
     const MemoryObject* mo = it->first.first;
@@ -581,7 +581,7 @@ void SpecialFunctionHandler::handleGetObjOffset(ExecutionState &state,
   assert(arguments.size()==1 &&
          "invalid number of arguments to klee_get_obj_offset");
   Executor::ExactResolutionList rl;
-  executor.resolveExact(state, arguments[0], rl, "klee_get_obj_offset");
+  executor.resolveIn(state, arguments[0], rl, "klee_get_obj_offset");
   for (Executor::ExactResolutionList::iterator it = rl.begin(),
          ie = rl.end(); it != ie; ++it) {
     const MemoryObject* mo = it->first.first;
