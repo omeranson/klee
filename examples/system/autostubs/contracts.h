@@ -6,6 +6,8 @@
 
 typedef long long i64;
 typedef long i32;
+typedef int16_t i16;
+typedef char i8;
 typedef unsigned char bool;
 
 #define size(buf) __size__##buf
