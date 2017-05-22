@@ -119,6 +119,7 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_alias_function", handleAliasFunction, false),
   add("malloc", handleMalloc, true),
   add("realloc", handleRealloc, true),
+  add("memset", handleMemset, true),
 
   // operator delete[](void*)
   add("_ZdaPv", handleDeleteArray, false),
@@ -646,6 +647,59 @@ void SpecialFunctionHandler::handleRealloc(ExecutionState &state,
                               it->first.second);
       }
     }
+  }
+}
+
+/** Optimise memset for klee */
+void SpecialFunctionHandler::handleMemset(ExecutionState &state,
+                            KInstruction *target,
+                            std::vector<ref<Expr> > &arguments) {
+
+  assert(arguments.size()==3 &&
+         "invalid number of arguments to realloc");
+  ref<Expr> address = arguments[0];
+  ref<Expr> bytes = arguments[2];
+  ref<Expr> valueWide = arguments[1];
+  ref<Expr> value = ExtractExpr::create(valueWide, valueWide->getWidth()-8, 8);
+
+  ResolutionList rl;  
+  state.addressSpace.resolve(state, executor.solver, address, rl);
+  
+  // XXX there is some query wasteage here. who cares?
+  ExecutionState *unbound = &state;
+  
+  for (ResolutionList::iterator i = rl.begin(), ie = rl.end(); i != ie; ++i) {
+    const MemoryObject *mo = i->first;
+    const ObjectState *os = i->second;
+    ref<Expr> offset = mo->getOffsetExpr(address);
+    ref<Expr> ptrInBounds = mo->getBoundsCheckPointer(AddExpr::create(offset, bytes));
+    Executor::StatePair branches = executor.fork(*unbound, ptrInBounds, true);
+    ExecutionState *bound = branches.first;
+
+    // bound can be 0 on failure or overlapped 
+    if (bound) {
+      if (os->readOnly) {
+        executor.terminateStateOnError(*bound, "memory error: object read only",
+				       Executor::ReadOnly);
+      } else {
+	int idx = 0;
+        while (bound) {
+	  ref<Expr> idxExpr = ConstantExpr::create(idx, offset->getWidth());
+	  idx++;
+	  ref<Expr> offset1 = AddExpr::create(offset, idxExpr);
+	  Executor::StatePair inSize = executor.fork(*bound, UltExpr::create(idxExpr, bytes), true);
+	  bound = inSize.first;
+	  if (bound) {
+            ObjectState *wos = bound->addressSpace.getWriteable(mo, os);
+	    wos->write(offset1, value);
+	  }
+	}
+      }
+    }
+
+    unbound = branches.second;
+    if (!unbound)
+      break;
   }
 }
 
