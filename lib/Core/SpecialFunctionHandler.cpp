@@ -341,7 +341,7 @@ void SpecialFunctionHandler::handleReportError(ExecutionState &state,
   
   llvm::Twine message = "";
   if (arguments.size() > 4) {
-    message = executor.getAddressInfo(arguments[4]);
+    message = executor.getAddressInfo(state, arguments[4]);
   }
   // arguments[0], arguments[1] are file, line
   executor.terminateStateOnError(state,
