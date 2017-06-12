@@ -1,13 +1,15 @@
 #include <stdarg.h>
 #include <stdint.h>
 #include <assert.h>
+#include <sys/uio.h>
+#include <sys/socket.h>
 
 #include <klee/klee.h>
 
-typedef long long i64;
-typedef long i32;
+typedef int64_t i64;
+typedef int32_t i32;
 typedef int16_t i16;
-typedef char i8;
+typedef int8_t i8;
 typedef unsigned char bool;
 
 #define size(buf) __size__##buf
