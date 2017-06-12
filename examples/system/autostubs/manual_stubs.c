@@ -129,3 +129,34 @@ long double strtold(const char *nptr, char **endptr) {
 	return result;
 }
 
+void tzset() {}
+
+struct hostent *gethostbyname(const char *name) {
+	// Watered down for NTP client only.
+	int isFail;
+	klee_make_symbolic(&isFail, sizeof(isFail), __FUNCTION__);
+	if (isFail == 0) {
+		struct hostent * result = malloc(sizeof(*result));
+		result->h_name = malloc(256);
+		klee_make_symbolic(result->h_name, 256, __FUNCTION__);
+		result->h_aliases = 0;
+		result->h_addrtype = klee_int(__FUNCTION__);
+		if (result->h_addrtype == AF_INET) {
+			result->h_length = 4;
+		} else if (result->h_addrtype == AF_INET6) {
+			result->h_length = 16;
+		} else {
+			klee_silent_exit(0);
+		}
+		result->h_addr_list = malloc(2*sizeof(char*));
+		result->h_addr_list[0] = malloc(result->h_length);
+		klee_make_symbolic(result->h_addr_list[0], result->h_length, __FUNCTION__);
+		result->h_addr_list[1] = 0;
+		return result;
+	} else if (isFail == 1) {
+		errno = klee_int(__FUNCTION__);
+		return 0;
+	}
+	klee_silent_exit(0);
+}
+
