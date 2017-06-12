@@ -337,13 +337,18 @@ void SpecialFunctionHandler::handleAssertFail(ExecutionState &state,
 void SpecialFunctionHandler::handleReportError(ExecutionState &state,
                                                KInstruction *target,
                                                std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size()==4 && "invalid number of arguments to klee_report_error");
+  assert(((arguments.size()==4) || (arguments.size()==5)) && "invalid number of arguments to klee_report_error");
   
+  llvm::Twine message = "";
+  if (arguments.size() > 4) {
+    message = executor.getAddressInfo(arguments[4]);
+  }
   // arguments[0], arguments[1] are file, line
   executor.terminateStateOnError(state,
 				 readStringAtAddress(state, arguments[2]),
 				 Executor::ReportError,
-				 readStringAtAddress(state, arguments[3]).c_str());
+				 readStringAtAddress(state, arguments[3]).c_str(),
+				 message);
 }
 
 void SpecialFunctionHandler::handleMerge(ExecutionState &state,

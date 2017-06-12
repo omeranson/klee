@@ -15,7 +15,7 @@ typedef unsigned char bool;
 #define last(buf,op) __last__##buf##__##op
 
 #define assume(p) if (!(p)) klee_silent_exit(p)
-#define warn(msg) klee_report_error(__FILE__, __LINE__, msg, "contract")
+#define warn(msg, ptr) klee_report_error(__FILE__, __LINE__, msg, "contract", ptr)
 #define SE_size_obj(buf) (buf ? klee_get_obj_size(klee_get_obj_base(buf)) : 0)
 #define SE_base_obj(buf) (buf ? klee_get_obj_base(buf) : 0)
 static inline int SE_SAT(cond) {
