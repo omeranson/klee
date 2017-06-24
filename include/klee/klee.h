@@ -73,7 +73,7 @@ extern "C" {
   void klee_report_error(const char *file, 
 			 int line, 
 			 const char *message, 
-			 const char *suffix);
+			 const char *suffix, ...);
   
   /* called by checking code to get size of memory. */
   size_t klee_get_obj_size(void *ptr);
