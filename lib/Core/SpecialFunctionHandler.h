@@ -115,6 +115,7 @@ namespace klee {
     HANDLER(handleGetObjOffset);
     HANDLER(handleGetValue);
     HANDLER(handleIsSymbolic);
+    HANDLER(handleIsSat);
     HANDLER(handleMakeSymbolic);
     HANDLER(handleMalloc);
     HANDLER(handleMarkGlobal);
