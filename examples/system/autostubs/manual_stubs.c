@@ -163,3 +163,11 @@ struct hostent *gethostbyname(const char *name) {
 	klee_silent_exit(0);
 }
 
+void openlog(const char *ident, int option, int facility) {}
+void closelog(void) {}
+void __vsyslog(int priority, const char *message, va_list ap) {
+	vprintf(message, ap);
+}
+void vsyslog(int priority, const char *message, va_list ap) {
+	vprintf(message, ap);
+}
