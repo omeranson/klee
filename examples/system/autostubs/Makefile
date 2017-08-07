@@ -1,5 +1,5 @@
 BASE=$(patsubst %.c,%,$(wildcard *.c))
-KCFLAGS=-I/home/oanson/opt/klee-install/include
+KCFLAGS=-I../../../include
 #CFLAGS=-g -fpic -Wall -Werror
 CFLAGS=-g -fpic -Wall
 CXXFLAGS=
