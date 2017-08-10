@@ -3087,7 +3087,7 @@ bool Executor::shouldExitOn(enum TerminateReason termReason) {
   return false;
 }
 
-void Executor::reportError(ExecutionState &state,
+void Executor::terminateStateOnError(ExecutionState &state,
                                      const llvm::Twine &messaget,
                                      enum TerminateReason termReason,
                                      const char *suffix,
@@ -3131,14 +3131,7 @@ void Executor::reportError(ExecutionState &state,
 
     interpreterHandler->processTestCase(state, msg.str().c_str(), suffix);
   }
-}
-
-void Executor::terminateStateOnError(ExecutionState &state,
-                                     const llvm::Twine &messaget,
-                                     enum TerminateReason termReason,
-                                     const char *suffix,
-                                     const llvm::Twine &info) {
-  reportError(state, messaget, termReason, suffix, info);
+    
   terminateState(state);
 
   if (shouldExitOn(termReason))

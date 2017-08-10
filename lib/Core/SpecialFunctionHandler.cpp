@@ -104,7 +104,6 @@ static SpecialFunctionHandler::HandlerInfo handlerInfo[] = {
   add("klee_get_obj_base", handleGetObjBase, true),
   add("klee_get_obj_offset", handleGetObjOffset, true),
   add("klee_get_errno", handleGetErrno, true),
-  add("klee_is_sat", handleIsSat, true),
   add("klee_is_symbolic", handleIsSymbolic, true),
   add("klee_make_symbolic", handleMakeSymbolic, false),
   add("klee_mark_global", handleMarkGlobal, false),
@@ -345,7 +344,7 @@ void SpecialFunctionHandler::handleReportError(ExecutionState &state,
     message = executor.getAddressInfo(state, arguments[4]);
   }
   // arguments[0], arguments[1] are file, line
-  executor.reportError(state,
+  executor.terminateStateOnError(state,
 				 readStringAtAddress(state, arguments[2]),
 				 Executor::ReportError,
 				 readStringAtAddress(state, arguments[3]).c_str(),
@@ -426,24 +425,6 @@ void SpecialFunctionHandler::handleAssume(ExecutionState &state,
   } else {
     executor.addConstraint(state, e);
   }
-}
-
-void SpecialFunctionHandler::handleIsSat(ExecutionState &state,
-                                KInstruction *target,
-                                std::vector<ref<Expr> > &arguments) {
-  assert(arguments.size()==1 && "invalid number of arguments to klee_is_sat");
-
-  double timeout = executor.coreSolverTimeout;
-  executor.solver->setTimeout(timeout);
-  bool res;
-  bool success = executor.solver->mayBeTrue(state, arguments[0], res);
-  executor.solver->setTimeout(0);
-  if (!success) {
-    executor.terminateStateEarly(state, "Query timed out (klee_is_sat).");
-    return;
-  }
-  ref<Expr> resExpr = ConstantExpr::create(res, Expr::Bool);
-  executor.bindLocal(target, state, resExpr);
 }
 
 void SpecialFunctionHandler::handleIsSymbolic(ExecutionState &state,

@@ -69,6 +69,7 @@ extern "C" {
    * \arg message - A string to include in the error message.
    * \arg suffix - The suffix to use for error files.
    */
+  __attribute__((noreturn))
   void klee_report_error(const char *file, 
 			 int line, 
 			 const char *message, 
