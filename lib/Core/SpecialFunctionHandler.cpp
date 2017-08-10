@@ -696,7 +696,8 @@ void SpecialFunctionHandler::handleMemset(ExecutionState &state,
     const MemoryObject *mo = i->first;
     const ObjectState *os = i->second;
     ref<Expr> offset = mo->getOffsetExpr(address);
-    ref<Expr> ptrInBounds = mo->getBoundsCheckPointer(AddExpr::create(offset, bytes));
+    ref<Expr> ptrInBounds = UleExpr::create(AddExpr::create(offset, bytes),
+                                            mo->getSizeExpr());
     Executor::StatePair branches = executor.fork(*unbound, ptrInBounds, true);
     ExecutionState *bound = branches.first;
 
@@ -705,6 +706,13 @@ void SpecialFunctionHandler::handleMemset(ExecutionState &state,
       if (os->readOnly) {
         executor.terminateStateOnError(*bound, "memory error: object read only",
 				       Executor::ReadOnly);
+      } else if (isa<ConstantExpr>(offset) && isa<ConstantExpr>(bytes)) {
+        uint64_t offset_ce = dyn_cast<ConstantExpr>(offset)->getZExtValue();
+        uint64_t bytes_ce = dyn_cast<ConstantExpr>(bytes)->getZExtValue();
+        ObjectState *wos = bound->addressSpace.getWriteable(mo, os);
+        for (; bytes_ce > 0; bytes_ce--) {
+          wos->write(offset_ce++, value);
+        }
       } else {
 	int idx = 0;
         while (bound) {
@@ -717,6 +725,10 @@ void SpecialFunctionHandler::handleMemset(ExecutionState &state,
             ObjectState *wos = bound->addressSpace.getWriteable(mo, os);
 	    wos->write(offset1, value);
 	  }
+          if (inSize.second) {
+            executor.terminateStateOnError(*inSize.second, "memset out of bound (Unreachable error!)",
+                Executor::Ptr, NULL, executor.getAddressInfo(*inSize.second, address));
+          }
 	}
       }
     }
